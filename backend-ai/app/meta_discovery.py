@@ -25,12 +25,7 @@ def _classify_meta_error(response: httpx.Response, operation: str) -> ConnectorE
 
 
 async def instagram_hashtag_search(hashtag: str, limit: int = 25) -> list[SocialEventIn]:
-    """Official Instagram Graph hashtag discovery for approved professional accounts.
-
-    Flow: /ig_hashtag_search -> /{hashtag-id}/recent_media. This connector is
-    intentionally authorization-gated; it never substitutes scraping for missing
-    Meta permissions.
-    """
+    """Official Instagram Graph hashtag discovery for approved professional accounts."""
     token = SETTINGS.meta_access_token
     account_id = SETTINGS.meta_instagram_account_id
     if not token:
@@ -63,7 +58,7 @@ async def instagram_hashtag_search(hashtag: str, limit: int = 25) -> list[Social
                 "user_id": account_id,
                 "access_token": token,
                 "limit": min(limit, 50),
-                "fields": "id,caption,comments_count,like_count,media_type,permalink,timestamp",
+                "fields": "id,caption,comments_count,like_count,media_type,media_url,thumbnail_url,permalink,timestamp",
             },
         )
         if media.status_code >= 400:
@@ -75,6 +70,9 @@ async def instagram_hashtag_search(hashtag: str, limit: int = 25) -> list[Social
         caption = str(item.get("caption") or "").strip()
         if not media_id or not caption:
             continue
+        media_type = str(item.get("media_type") or "").lower()
+        media_url = item.get("media_url")
+        thumbnail_url = item.get("thumbnail_url") or (media_url if media_type == "image" else None)
         output.append(
             SocialEventIn(
                 platform="instagram",
@@ -94,6 +92,9 @@ async def instagram_hashtag_search(hashtag: str, limit: int = 25) -> list[Social
                     "collection_scope": "official_public_hashtag_recent_media",
                     "queried_hashtag": clean,
                     "media_type": item.get("media_type"),
+                    "media_kind": "video" if media_type in {"video", "reels"} else "image" if media_type == "image" else "carousel",
+                    "media_url": media_url,
+                    "thumbnail_url": thumbnail_url,
                     "author_unavailable": True,
                 },
                 source_mode="LIVE",
