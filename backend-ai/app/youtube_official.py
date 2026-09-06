@@ -11,14 +11,17 @@ from .schemas import SocialEventIn, YouTubeSearchRequest
 SETTINGS = get_settings()
 
 
-async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialEventIn]:
-    """Official YouTube Data API v3 search with video-first resilience.
+def _thumbnail(snippet: dict) -> str | None:
+    thumbnails = snippet.get("thumbnails") or {}
+    for key in ("maxres", "standard", "high", "medium", "default"):
+        url = (thumbnails.get(key) or {}).get("url")
+        if url:
+            return str(url)
+    return None
 
-    Every successful search result is normalized as a video event before comment
-    collection is attempted. A video with comments disabled therefore still
-    contributes timestamped public evidence instead of making the connector look
-    empty.
-    """
+
+async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialEventIn]:
+    """Official YouTube Data API v3 search with video-first resilience."""
     key = SETTINGS.youtube_api_key
     if not key:
         raise ConnectorError("YouTube API key is not configured.", "CREDENTIALS_REQUIRED")
@@ -60,8 +63,8 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
             video_text = " — ".join(part for part in [title, description] if part).strip()
             channel_id = str(snippet.get("channelId") or "") or None
             channel_title = str(snippet.get("channelTitle") or "") or None
+            thumb = _thumbnail(snippet)
 
-            # Always retain the video result itself, even if comments are disabled.
             output.append(
                 SocialEventIn(
                     platform="youtube",
@@ -74,7 +77,14 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
                     url=f"https://www.youtube.com/watch?v={video_id}",
                     conversation_id=video_id,
                     engagement={},
-                    public_profile={"collection_scope": "official_video_search"},
+                    public_profile={
+                        "collection_scope": "official_video_search",
+                        "media_kind": "video",
+                        "thumbnail_url": thumb,
+                        "embed_url": f"https://www.youtube.com/embed/{video_id}",
+                        "video_id": video_id,
+                        "channel_title": channel_title,
+                    },
                     source_mode="LIVE",
                     connector_run_id=run_id,
                 )
@@ -91,11 +101,7 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
                     "order": "time",
                 },
             )
-            if comments_resp.status_code in {403, 404}:
-                # Disabled/restricted comments are normal; the video event remains.
-                continue
-            if comments_resp.status_code == 429:
-                # Keep already collected video evidence rather than failing the run.
+            if comments_resp.status_code in {403, 404, 429}:
                 continue
             if comments_resp.status_code >= 400:
                 continue
@@ -120,7 +126,14 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
                         parent_event_id=f"video:{video_id}",
                         conversation_id=video_id,
                         engagement={"likes": comment.get("likeCount", 0)},
-                        public_profile={"collection_scope": "official_comment_thread"},
+                        public_profile={
+                            "collection_scope": "official_comment_thread",
+                            "avatar_url": comment.get("authorProfileImageUrl"),
+                            "media_kind": "video_context",
+                            "thumbnail_url": thumb,
+                            "embed_url": f"https://www.youtube.com/embed/{video_id}",
+                            "video_id": video_id,
+                        },
                         source_mode="LIVE",
                         connector_run_id=run_id,
                     )
