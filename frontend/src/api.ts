@@ -170,6 +170,21 @@ export interface DemographicsResponse {
   privacy_note: string;
 }
 
+export interface CollectorStatus {
+  running: boolean;
+  config?: {
+    query: string;
+    interval_seconds: number;
+    enable_telegram: boolean;
+    enable_x: boolean;
+    enable_youtube: boolean;
+  } | null;
+  cycles: number;
+  last_run_at?: string | null;
+  last_result?: Record<string, unknown>;
+  note: string;
+}
+
 const DIRECT_API = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 const JAVA_API = import.meta.env.VITE_JAVA_GATEWAY_URL || 'http://127.0.0.1:8080';
 const USE_GATEWAY = String(import.meta.env.VITE_USE_JAVA_GATEWAY || 'false').toLowerCase() === 'true';
@@ -198,9 +213,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   const contentType = response.headers.get('content-type') || '';
-  if (!contentType.includes('application/json')) {
-    return (await response.text()) as T;
-  }
+  if (!contentType.includes('application/json')) return (await response.text()) as T;
   return response.json() as Promise<T>;
 }
 
@@ -215,24 +228,38 @@ export const api = {
   demographics: () => request<DemographicsResponse>('/api/demographics'),
   alerts: () => request<{ alerts: AlertItem[] }>('/api/alerts'),
   events: () => request<{ events: SocialEvent[] }>('/api/events?limit=500&newest_first=true'),
-  seedDemo: () =>
-    request<{ inserted: number; total_events: number; message: string }>('/api/demo/seed', {
+  seedDemo: () => request<{ inserted: number; total_events: number; message: string }>('/api/demo/seed', {
+    method: 'POST', body: JSON.stringify({ reset: true }),
+  }),
+  pollTelegram: () => request<{ inserted: number; total_events: number }>('/api/connectors/telegram/poll', {
+    method: 'POST', body: JSON.stringify({ max_updates: 50 }),
+  }),
+  searchX: (query: string) => request<{ inserted: number; total_events: number }>('/api/connectors/x/search', {
+    method: 'POST', body: JSON.stringify({ query, max_results: 20 }),
+  }),
+  searchYouTube: (query: string) => request<{ inserted: number; total_events: number }>('/api/connectors/youtube/search', {
+    method: 'POST', body: JSON.stringify({ query, max_videos: 3, max_comments_per_video: 20 }),
+  }),
+  syncMeta: (source: 'instagram' | 'facebook') => request<{ inserted: number; total_events: number }>(
+    '/api/connectors/meta/sync', { method: 'POST', body: JSON.stringify({ source, limit: 25 }) },
+  ),
+  collectorStatus: () => request<CollectorStatus>('/api/collector/status'),
+  startCollector: (query: string, options?: { telegram?: boolean; x?: boolean; youtube?: boolean; interval?: number }) => request<CollectorStatus>(
+    '/api/collector/start', {
       method: 'POST',
-      body: JSON.stringify({ reset: true }),
-    }),
-  pollTelegram: () =>
-    request<{ inserted: number; total_events: number }>('/api/connectors/telegram/poll', {
-      method: 'POST',
-      body: JSON.stringify({ max_updates: 50 }),
-    }),
-  searchX: (query: string) =>
-    request<{ inserted: number; total_events: number }>('/api/connectors/x/search', {
-      method: 'POST',
-      body: JSON.stringify({ query, max_results: 20 }),
-    }),
-  searchYouTube: (query: string) =>
-    request<{ inserted: number; total_events: number }>('/api/connectors/youtube/search', {
-      method: 'POST',
-      body: JSON.stringify({ query, max_videos: 3, max_comments_per_video: 20 }),
-    }),
+      body: JSON.stringify({
+        query,
+        interval_seconds: options?.interval || 60,
+        enable_telegram: options?.telegram ?? true,
+        enable_x: options?.x ?? false,
+        enable_youtube: options?.youtube ?? false,
+      }),
+    },
+  ),
+  stopCollector: () => request<CollectorStatus>('/api/collector/stop', { method: 'POST', body: '{}' }),
+  importEvents: (events: unknown[]) => request<{ inserted: number; total_events: number }>('/api/ingest/replay', {
+    method: 'POST', body: JSON.stringify({ events }),
+  }),
+  narrativeJsonUrl: (id: string) => `${API_BASE}/api/export/narrative/${encodeURIComponent(id)}.json`,
+  narrativeCsvUrl: (id: string) => `${API_BASE}/api/export/narrative/${encodeURIComponent(id)}.csv`,
 };
