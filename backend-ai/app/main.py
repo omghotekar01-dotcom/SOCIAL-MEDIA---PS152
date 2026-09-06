@@ -19,6 +19,7 @@ from .analytics import (
     seed_demo_events,
     timeline,
 )
+from .certificates import build_narrative_certificate, certificate_summary
 from .collector import COLLECTOR, CollectorStartRequest
 from .config import get_settings
 from .connectors import ConnectorError, connector_statuses, meta_sync, telegram_poll, x_recent_search, youtube_search
@@ -49,7 +50,6 @@ from .schemas import (
     XSearchRequest,
     YouTubeSearchRequest,
 )
-
 
 SETTINGS = get_settings()
 STORE = get_store()
@@ -97,7 +97,7 @@ def connector_exception(exc: ConnectorError) -> HTTPException:
 
 
 def enhanced_connector_statuses() -> list[ConnectorStatus]:
-    """Expose the truth about official access and the free fallback beside it."""
+    """Expose official access and free fallbacks without pretending degraded access is equivalent."""
     base = {item.platform: item for item in connector_statuses()}
 
     if not SETTINGS.x_bearer_token:
@@ -105,33 +105,29 @@ def enhanced_connector_statuses() -> list[ConnectorStatus]:
             platform="x",
             state="DEGRADED" if SETTINGS.x_public_rss_url_template else "CREDENTIALS_REQUIRED",
             detail=(
-                "Free configured RSS/public bridge is available; official X API remains the preferred richer path."
+                "Configured permitted RSS/public bridge is available; official X API remains the preferred richer path."
                 if SETTINGS.x_public_rss_url_template
-                else "Official recent-search requires X developer access/credits. NEXUS still supports replay/import; optionally configure X_PUBLIC_RSS_URL_TEMPLATE for a public bridge."
+                else "Official recent-search requires X developer access/credits. Replay/import remains available; optionally configure a permitted X_PUBLIC_RSS_URL_TEMPLATE."
             ),
             source_mode="LIVE" if SETTINGS.x_public_rss_url_template else "IMPORT",
         )
 
-    if not SETTINGS.telegram_bot_token:
-        base["telegram"] = ConnectorStatus(
-            platform="telegram",
-            state="READY",
-            detail="Zero-key public-channel preview ingestion is ready. Bot API remains an additional free path for chats visible to your authorized bot.",
-            source_mode="LIVE",
-        )
-    else:
-        base["telegram"] = ConnectorStatus(
-            platform="telegram",
-            state="READY",
-            detail="Bot API live ingestion is configured, and zero-key public-channel preview ingestion is also available.",
-            source_mode="LIVE",
-        )
+    base["telegram"] = ConnectorStatus(
+        platform="telegram",
+        state="READY",
+        detail=(
+            "Bot API live ingestion is configured, and zero-key public-channel preview ingestion is also available."
+            if SETTINGS.telegram_bot_token
+            else "Zero-key public-channel preview ingestion is ready. Bot API is an additional free path for chats visible to an authorized bot."
+        ),
+        source_mode="LIVE",
+    )
 
     if not SETTINGS.youtube_api_key:
         base["youtube"] = ConnectorStatus(
             platform="youtube",
             state="DEGRADED",
-            detail="Zero-key yt-dlp public video-metadata search is available. Add a YouTube Data API key for richer official search/comment ingestion and quota semantics.",
+            detail="Zero-key yt-dlp public video-metadata search is available. Add a YouTube Data API key for richer official search/comment ingestion.",
             source_mode="LIVE",
         )
 
@@ -139,7 +135,7 @@ def enhanced_connector_statuses() -> list[ConnectorStatus]:
         base["instagram"] = ConnectorStatus(
             platform="instagram",
             state="DEGRADED",
-            detail="Best-effort public-profile fallback is available for genuinely public profiles; official Meta Graph access is preferred and required for stable authorized professional-account data.",
+            detail="Best-effort public-profile fallback is available for genuinely public profiles; official Meta Graph access is preferred for stable authorized professional-account data.",
             source_mode="LIVE",
         )
 
@@ -152,13 +148,13 @@ def enhanced_connector_statuses() -> list[ConnectorStatus]:
     base["reddit"] = ConnectorStatus(
         platform="reddit",
         state="DEGRADED",
-        detail="Low-volume public JSON search is available where Reddit permits it from the current network; OAuth/import remains the fallback if public JSON is restricted.",
+        detail="Low-volume public JSON search is attempted where Reddit permits it; OAuth/import remains the fallback if restricted.",
         source_mode="LIVE",
     )
     base["mastodon"] = ConnectorStatus(
         platform="mastodon",
         state="DEGRADED",
-        detail=f"Public instance search targets {SETTINGS.mastodon_base_url}; search availability depends on the chosen Mastodon instance policy.",
+        detail=f"Public instance search targets {SETTINGS.mastodon_base_url}; availability depends on the selected instance policy.",
         source_mode="LIVE",
     )
     return list(base.values())
@@ -409,6 +405,42 @@ def api_alerts():
     return {"alerts": alerts(STORE)}
 
 
+@app.get("/api/certificates", tags=["evidence-certificate"])
+def api_certificates():
+    certificates = []
+    for narrative in narrative_summaries(STORE):
+        certificate = build_narrative_certificate(STORE, narrative["id"])
+        if certificate:
+            certificates.append(certificate_summary(certificate))
+    return {"certificates": certificates, "policy": "No certificate => ABSTAIN for high-severity narrative claims."}
+
+
+@app.get("/api/certificates/narrative/{narrative_id}", tags=["evidence-certificate"])
+def api_narrative_certificate(narrative_id: str):
+    certificate = build_narrative_certificate(STORE, narrative_id)
+    if not certificate:
+        raise HTTPException(status_code=404, detail="Narrative not found; no evidence certificate can be issued.")
+    return certificate
+
+
+@app.get("/api/certificates/alert/{alert_id}", tags=["evidence-certificate"])
+def api_alert_certificate(alert_id: str):
+    alert_match = None
+    for item in alerts(STORE):
+        item_id = getattr(item, "alert_id", None) if not isinstance(item, dict) else item.get("alert_id")
+        if item_id == alert_id:
+            alert_match = item
+            break
+    if alert_match is None:
+        raise HTTPException(status_code=404, detail="Alert not found; ABSTAIN.")
+    narrative_id = getattr(alert_match, "narrative_id", None) if not isinstance(alert_match, dict) else alert_match.get("narrative_id")
+    certificate = build_narrative_certificate(STORE, str(narrative_id))
+    if not certificate:
+        raise HTTPException(status_code=409, detail={"decision": "ABSTAIN", "reason": "Insufficient replayable evidence for this alert."})
+    certificate["alert_id"] = alert_id
+    return certificate
+
+
 @app.get("/api/events", tags=["evidence"])
 def api_events(
     limit: int = Query(default=250, ge=1, le=2000),
@@ -473,8 +505,8 @@ def export_narrative_csv(narrative_id: str):
         ],
     )
     writer.writeheader()
-    for e in events:
-        writer.writerow({field: getattr(e, field) for field in writer.fieldnames})
+    for event in events:
+        writer.writerow({field: getattr(event, field) for field in writer.fieldnames})
     filename = f"nexus-{narrative_id}.csv"
     return Response(
         buffer.getvalue(),
