@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0.."
 
 echo ============================================================
-echo  NEXUS - SIH26152 DEMO STARTER v0.3.2
+echo  NEXUS - SIH26152 DEMO STARTER v0.3.3
 echo ============================================================
 
 where python >nul 2>&1
@@ -91,7 +91,7 @@ call :wait_for_api
 if errorlevel 1 goto :fail
 
 echo [6/7] Seeding deterministic fictional jury dataset...
-powershell -NoProfile -Command "$body='{""reset"":true}'; Invoke-RestMethod -Uri 'http://127.0.0.1:8000/api/demo/seed' -Method POST -ContentType 'application/json' -Body $body | Out-Null" >nul 2>&1
+"%PY%" scripts\seed_demo.py
 if errorlevel 1 (
   echo [ERROR] FastAPI started but demo seed failed.
   goto :fail
