@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { type CSSProperties, useState } from 'react';
 import { Radio, ShieldCheck, Wifi, X as CloseIcon } from 'lucide-react';
 import { API_BASE } from './api';
 
 type ActionName = 'telegram' | 'youtube' | 'bluesky' | 'reddit' | 'mastodon' | 'instagram' | 'x';
 
-const buttonStyle: React.CSSProperties = {
+const buttonStyle: CSSProperties = {
   border: '1px solid rgba(130,155,210,.28)',
   background: 'rgba(15,23,42,.84)',
   color: '#e9f0ff',
@@ -15,7 +15,7 @@ const buttonStyle: React.CSSProperties = {
   fontWeight: 700,
 };
 
-const inputStyle: React.CSSProperties = {
+const inputStyle: CSSProperties = {
   minWidth: 180,
   flex: 1,
   border: '1px solid rgba(130,155,210,.28)',
