@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +51,7 @@ from .schemas import (
     SocialEventIn,
     TelegramPollRequest,
     TelegramPublicRequest,
+    WorkspaceSearchRequest,
     XSearchRequest,
     YouTubeSearchRequest,
 )
@@ -59,7 +62,7 @@ STORE = get_store()
 app = FastAPI(
     title="NEXUS — Narrative & Influence Intelligence",
     description="SIH26152 social-media analytics engine with evidence-aware narrative lineage and free/public-source fallbacks.",
-    version="0.3.0",
+    version="0.4.0",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -68,6 +71,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _stamp_events(
+    events: list[SocialEventIn],
+    *,
+    connector: str,
+    search_query: str | None = None,
+    search_session_id: str | None = None,
+) -> list[SocialEventIn]:
+    stamped: list[SocialEventIn] = []
+    for event in events:
+        profile = dict(event.public_profile or {})
+        profile["connector"] = connector
+        if search_query:
+            profile["search_query"] = search_query
+        if search_session_id:
+            profile["search_session_id"] = search_session_id
+        stamped.append(event.model_copy(update={"public_profile": profile}))
+    return stamped
 
 
 def ingest(events: list[SocialEventIn]) -> dict[str, Any]:
@@ -181,7 +203,7 @@ def root() -> dict[str, str]:
 
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 def health() -> HealthResponse:
-    return HealthResponse(status="ok", service="nexus-ai", version="0.3.0", environment=SETTINGS.nexus_env)
+    return HealthResponse(status="ok", service="nexus-ai", version="0.4.0", environment=SETTINGS.nexus_env)
 
 
 @app.get("/api/connectors/status", tags=["connectors"])
@@ -204,11 +226,84 @@ async def collector_stop():
     return await COLLECTOR.stop()
 
 
+@app.post("/api/workspace/reset", tags=["workspace"])
+async def workspace_reset():
+    """Clear the active analyst result pool without seeding replacement data."""
+    await COLLECTOR.stop()
+    STORE.reset()
+    return {"status": "cleared", "total_events": 0}
+
+
+@app.post("/api/search/workspace", tags=["workspace"])
+async def workspace_search(request: WorkspaceSearchRequest):
+    """Create a clean search workspace and collect independent low-cost sources.
+
+    This is the default analyst search path. By resetting before a new query,
+    analytics for one topic cannot collide with results from a previous topic.
+    Connector failures are reported per source and do not discard successful
+    evidence from other sources.
+    """
+    if request.reset:
+        await COLLECTOR.stop()
+        STORE.reset()
+
+    session_id = f"search-{uuid4().hex[:12]}"
+    limit = request.limit_per_source
+    jobs: list[tuple[str, str, Any]] = []
+
+    if request.enable_youtube:
+        jobs.append(("youtube", "yt_dlp_public_metadata", youtube_free_search(request.query, min(limit, 25))))
+    if request.enable_bluesky:
+        jobs.append(("bluesky", "public_atproto", bluesky_search(request.query, limit)))
+    if request.enable_reddit:
+        jobs.append(("reddit", "public_json", reddit_public_search(request.query, limit)))
+    if request.enable_mastodon:
+        jobs.append(("mastodon", "public_instance_api", mastodon_search(request.query, min(limit, 40), None)))
+    if request.telegram_channel:
+        jobs.append(("telegram", "telegram_public_preview", telegram_public_channel(request.telegram_channel, limit)))
+    if request.instagram_profile:
+        jobs.append(("instagram", "instaloader_public_profile", instagram_public_profile(request.instagram_profile, min(limit, 20))))
+
+    results = await asyncio.gather(*(job[2] for job in jobs), return_exceptions=True)
+    collected: list[SocialEventIn] = []
+    sources: dict[str, Any] = {}
+
+    for (platform, connector, _), result in zip(jobs, results):
+        if isinstance(result, Exception):
+            state = result.state if isinstance(result, ConnectorError) else "ERROR"
+            sources[platform] = {"state": state, "received": 0, "detail": str(result)[:300]}
+            continue
+        stamped = _stamp_events(
+            result,
+            connector=connector,
+            search_query=request.query,
+            search_session_id=session_id,
+        )
+        collected.extend(stamped)
+        sources[platform] = {"state": "OK", "received": len(stamped), "connector": connector}
+
+    ingest_result = ingest(collected) if collected else {
+        "received": 0,
+        "inserted": 0,
+        "duplicates": 0,
+        "event_ids": [],
+        "total_events": STORE.count(),
+    }
+    return {
+        **ingest_result,
+        "query": request.query,
+        "search_session_id": session_id,
+        "reset": request.reset,
+        "sources": sources,
+        "message": "Fresh search workspace loaded; previous query results were cleared." if request.reset else "Search evidence appended to current workspace.",
+    }
+
+
 @app.post("/api/demo/seed", tags=["demo"])
 def seed_demo(request: DemoSeedRequest):
     if request.reset:
         STORE.reset()
-    events = seed_demo_events()
+    events = _stamp_events(seed_demo_events(), connector="deterministic_replay", search_query="#RiverLinkUpdate", search_session_id="demo-seed-v1")
     result = ingest(events)
     result["message"] = "Deterministic fictional demo dataset loaded. Replay/import/live source labels remain explicit."
     return result
@@ -220,7 +315,7 @@ def ingest_replay(request: ReplayImportRequest):
     for event in request.events:
         mode = "REPLAY" if event.source_mode == "REPLAY" else "IMPORT"
         safe_events.append(event.model_copy(update={"source_mode": mode}))
-    return ingest(safe_events)
+    return ingest(_stamp_events(safe_events, connector="user_import"))
 
 
 @app.post("/api/connectors/x/search", tags=["connectors"])
@@ -229,7 +324,7 @@ async def ingest_x(request: XSearchRequest):
         events = await x_recent_search(request)
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
-    result = ingest(events)
+    result = ingest(_stamp_events(events, connector="official_x_api_v2", search_query=request.query))
     result.update(platform="x", source_mode="LIVE", connector="official_x_api_v2")
     return result
 
@@ -242,7 +337,7 @@ async def ingest_x_public(request: PublicBridgeRequest):
         events = await x_public_bridge(request.query, request.target, request.limit)
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
-    result = ingest(events)
+    result = ingest(_stamp_events(events, connector="configured_public_bridge", search_query=request.query or request.target))
     result.update(platform="x", source_mode="LIVE", connector="configured_public_bridge")
     return result
 
@@ -253,7 +348,7 @@ async def ingest_telegram(request: TelegramPollRequest):
         events = await telegram_poll(request.max_updates)
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
-    result = ingest(events)
+    result = ingest(_stamp_events(events, connector="telegram_bot_api"))
     result.update(platform="telegram", source_mode="LIVE", connector="telegram_bot_api")
     return result
 
@@ -264,7 +359,7 @@ async def ingest_telegram_public(request: TelegramPublicRequest):
         events = await telegram_public_channel(request.channel, request.limit)
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
-    result = ingest(events)
+    result = ingest(_stamp_events(events, connector="telegram_public_preview", search_query=request.channel))
     result.update(platform="telegram", source_mode="LIVE", connector="telegram_public_preview")
     return result
 
@@ -275,7 +370,7 @@ async def ingest_youtube(request: YouTubeSearchRequest):
         events = await youtube_search(request)
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
-    result = ingest(events)
+    result = ingest(_stamp_events(events, connector="youtube_data_api_v3", search_query=request.query))
     result.update(platform="youtube", source_mode="LIVE", connector="youtube_data_api_v3")
     return result
 
@@ -286,7 +381,7 @@ async def ingest_youtube_free(request: PublicSearchRequest):
         events = await youtube_free_search(request.query, min(request.limit, 25))
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
-    result = ingest(events)
+    result = ingest(_stamp_events(events, connector="yt_dlp_public_metadata", search_query=request.query))
     result.update(platform="youtube", source_mode="LIVE", connector="yt_dlp_public_metadata")
     return result
 
@@ -297,7 +392,7 @@ async def ingest_meta(request: MetaSyncRequest):
         events = await meta_sync(request)
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
-    result = ingest(events)
+    result = ingest(_stamp_events(events, connector="meta_graph_api"))
     result.update(platform=request.source, source_mode="LIVE", connector="meta_graph_api")
     return result
 
@@ -308,7 +403,7 @@ async def ingest_instagram_hashtag(request: InstagramHashtagRequest):
         events = await instagram_hashtag_search(request.hashtag, request.limit)
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
-    result = ingest(events)
+    result = ingest(_stamp_events(events, connector="meta_graph_hashtag_recent_media", search_query=f"#{request.hashtag}"))
     result.update(platform="instagram", source_mode="LIVE", connector="meta_graph_hashtag_recent_media")
     return result
 
@@ -319,7 +414,7 @@ async def ingest_instagram_public(request: InstagramPublicRequest):
         events = await instagram_public_profile(request.profile, request.limit)
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
-    result = ingest(events)
+    result = ingest(_stamp_events(events, connector="instaloader_public_profile", search_query=request.profile))
     result.update(platform="instagram", source_mode="LIVE", connector="instaloader_public_profile")
     return result
 
@@ -330,7 +425,7 @@ async def ingest_bluesky(request: PublicSearchRequest):
         events = await bluesky_search(request.query, request.limit)
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
-    result = ingest(events)
+    result = ingest(_stamp_events(events, connector="public_atproto", search_query=request.query))
     result.update(platform="bluesky", source_mode="LIVE", connector="public_atproto")
     return result
 
@@ -341,7 +436,7 @@ async def ingest_reddit(request: PublicSearchRequest):
         events = await reddit_public_search(request.query, request.limit)
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
-    result = ingest(events)
+    result = ingest(_stamp_events(events, connector="public_json", search_query=request.query))
     result.update(platform="reddit", source_mode="LIVE", connector="public_json")
     return result
 
@@ -352,7 +447,7 @@ async def ingest_mastodon(request: MastodonSearchRequest):
         events = await mastodon_search(request.query, request.limit, request.base_url)
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
-    result = ingest(events)
+    result = ingest(_stamp_events(events, connector="public_instance_api", search_query=request.query))
     result.update(platform="mastodon", source_mode="LIVE", connector="public_instance_api")
     return result
 
@@ -402,6 +497,8 @@ def api_narrative_detail(narrative_id: str):
                 "sentiment": e.sentiment_label,
                 "stance": e.stance_label,
                 "source_url": e.url,
+                "engagement": e.engagement,
+                "public_profile": e.public_profile,
             }
             for e in chronological
         ],
