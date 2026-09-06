@@ -33,10 +33,12 @@ from .free_connectors import (
     x_public_bridge,
     youtube_free_search,
 )
+from .meta_discovery import instagram_hashtag_search
 from .schemas import (
     ConnectorStatus,
     DemoSeedRequest,
     HealthResponse,
+    InstagramHashtagRequest,
     InstagramPublicRequest,
     MastodonSearchRequest,
     MetaSyncRequest,
@@ -131,11 +133,18 @@ def enhanced_connector_statuses() -> list[ConnectorStatus]:
             source_mode="LIVE",
         )
 
-    if not (SETTINGS.meta_access_token and SETTINGS.meta_instagram_account_id):
+    if SETTINGS.meta_access_token and SETTINGS.meta_instagram_account_id:
+        base["instagram"] = ConnectorStatus(
+            platform="instagram",
+            state="READY",
+            detail="Meta Graph credentials configured for authorized account sync and official public hashtag discovery where the app has Instagram Public Content Access.",
+            source_mode="LIVE",
+        )
+    else:
         base["instagram"] = ConnectorStatus(
             platform="instagram",
             state="DEGRADED",
-            detail="Best-effort public-profile fallback is available for genuinely public profiles; official Meta Graph access is preferred for stable authorized professional-account data.",
+            detail="Best-effort public-profile fallback is available for genuinely public profiles; official Meta Graph access is preferred for stable account and hashtag data.",
             source_mode="LIVE",
         )
 
@@ -290,6 +299,17 @@ async def ingest_meta(request: MetaSyncRequest):
         raise connector_exception(exc) from exc
     result = ingest(events)
     result.update(platform=request.source, source_mode="LIVE", connector="meta_graph_api")
+    return result
+
+
+@app.post("/api/connectors/instagram/hashtag", tags=["connectors"])
+async def ingest_instagram_hashtag(request: InstagramHashtagRequest):
+    try:
+        events = await instagram_hashtag_search(request.hashtag, request.limit)
+    except ConnectorError as exc:
+        raise connector_exception(exc) from exc
+    result = ingest(events)
+    result.update(platform="instagram", source_mode="LIVE", connector="meta_graph_hashtag_recent_media")
     return result
 
 
