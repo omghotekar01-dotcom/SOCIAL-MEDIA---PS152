@@ -12,6 +12,8 @@ from .schemas import ConnectorStatus, MetaSyncRequest, SocialEventIn, XSearchReq
 
 
 SETTINGS = get_settings()
+TELEGRAM_UPDATE_OFFSET = 0
+TELEGRAM_POLL_LOCK = asyncio.Lock()
 
 
 class ConnectorError(RuntimeError):
@@ -183,32 +185,51 @@ async def x_recent_search(request: XSearchRequest) -> list[SocialEventIn]:
 
 
 async def telegram_poll(max_updates: int = 50) -> list[SocialEventIn]:
+    global TELEGRAM_UPDATE_OFFSET
+
     token = SETTINGS.telegram_bot_token
     if not token:
         raise ConnectorError("Telegram bot token is not configured.", "CREDENTIALS_REQUIRED")
 
     run_id = f"tg-{uuid4().hex[:10]}"
     endpoint = f"https://api.telegram.org/bot{token}/getUpdates"
-    params = {
-        "timeout": min(max(0, SETTINGS.telegram_poll_timeout_seconds), 20),
-        "limit": min(max_updates, 100),
-        "allowed_updates": '["message","edited_message","channel_post","edited_channel_post"]',
-    }
-    async with httpx.AsyncClient(timeout=SETTINGS.telegram_poll_timeout_seconds + 10) as client:
-        response = await client.get(endpoint, params=params)
-    if response.status_code == 401:
-        raise ConnectorError("Telegram bot token is invalid.", "CREDENTIALS_REQUIRED")
-    if response.status_code == 429:
-        raise ConnectorError("Telegram Bot API rate-limited the request.", "RATE_LIMITED")
-    if response.status_code >= 400:
-        raise ConnectorError(f"Telegram API error {response.status_code}: {response.text[:300]}")
-    body = response.json()
-    if not body.get("ok"):
-        raise ConnectorError(f"Telegram API returned an error: {body.get('description', 'unknown error')}")
+
+    async with TELEGRAM_POLL_LOCK:
+        params: dict[str, Any] = {
+            "timeout": min(max(0, SETTINGS.telegram_poll_timeout_seconds), 20),
+            "limit": min(max_updates, 100),
+            "allowed_updates": '["message","edited_message","channel_post","edited_channel_post"]',
+        }
+        if TELEGRAM_UPDATE_OFFSET > 0:
+            params["offset"] = TELEGRAM_UPDATE_OFFSET
+
+        async with httpx.AsyncClient(timeout=SETTINGS.telegram_poll_timeout_seconds + 10) as client:
+            response = await client.get(endpoint, params=params)
+
+        if response.status_code == 401:
+            raise ConnectorError("Telegram bot token is invalid.", "CREDENTIALS_REQUIRED")
+        if response.status_code == 409:
+            raise ConnectorError(
+                "Telegram getUpdates conflicts with an active webhook. Remove the webhook or use a different demo bot for polling.",
+                "PERMISSION_REQUIRED",
+            )
+        if response.status_code == 429:
+            raise ConnectorError("Telegram Bot API rate-limited the request.", "RATE_LIMITED")
+        if response.status_code >= 400:
+            raise ConnectorError(f"Telegram API error {response.status_code}: {response.text[:300]}")
+        body = response.json()
+        if not body.get("ok"):
+            raise ConnectorError(f"Telegram API returned an error: {body.get('description', 'unknown error')}")
+
+        updates = body.get("result", [])
+        if updates:
+            update_ids = [int(item.get("update_id")) for item in updates if item.get("update_id") is not None]
+            if update_ids:
+                TELEGRAM_UPDATE_OFFSET = max(TELEGRAM_UPDATE_OFFSET, max(update_ids) + 1)
 
     allowed = SETTINGS.telegram_allowed_chat_id_set
     output: list[SocialEventIn] = []
-    for update in body.get("result", []):
+    for update in updates:
         container = None
         event_type = "message"
         for key in ("message", "edited_message", "channel_post", "edited_channel_post"):
