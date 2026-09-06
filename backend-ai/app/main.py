@@ -23,14 +23,29 @@ from .collector import COLLECTOR, CollectorStartRequest
 from .config import get_settings
 from .connectors import ConnectorError, connector_statuses, meta_sync, telegram_poll, x_recent_search, youtube_search
 from .db import get_store
+from .free_connectors import (
+    bluesky_search,
+    instagram_public_profile,
+    mastodon_search,
+    reddit_public_search,
+    telegram_public_channel,
+    x_public_bridge,
+    youtube_free_search,
+)
 from .schemas import (
+    ConnectorStatus,
     DemoSeedRequest,
     HealthResponse,
+    InstagramPublicRequest,
+    MastodonSearchRequest,
     MetaSyncRequest,
+    PublicBridgeRequest,
+    PublicSearchRequest,
     ReplayImportRequest,
     SocialEvent,
     SocialEventIn,
     TelegramPollRequest,
+    TelegramPublicRequest,
     XSearchRequest,
     YouTubeSearchRequest,
 )
@@ -41,8 +56,8 @@ STORE = get_store()
 
 app = FastAPI(
     title="NEXUS — Narrative & Influence Intelligence",
-    description="SIH26152 social-media analytics engine with evidence-aware narrative lineage.",
-    version="0.2.0",
+    description="SIH26152 social-media analytics engine with evidence-aware narrative lineage and free/public-source fallbacks.",
+    version="0.3.0",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -76,7 +91,77 @@ def ingest(events: list[SocialEventIn]) -> dict[str, Any]:
 
 def connector_exception(exc: ConnectorError) -> HTTPException:
     status_code = 429 if exc.state == "RATE_LIMITED" else 503
+    if exc.state == "ERROR":
+        status_code = 400
     return HTTPException(status_code=status_code, detail={"state": exc.state, "message": str(exc)})
+
+
+def enhanced_connector_statuses() -> list[ConnectorStatus]:
+    """Expose the truth about official access and the free fallback beside it."""
+    base = {item.platform: item for item in connector_statuses()}
+
+    if not SETTINGS.x_bearer_token:
+        base["x"] = ConnectorStatus(
+            platform="x",
+            state="DEGRADED" if SETTINGS.x_public_rss_url_template else "CREDENTIALS_REQUIRED",
+            detail=(
+                "Free configured RSS/public bridge is available; official X API remains the preferred richer path."
+                if SETTINGS.x_public_rss_url_template
+                else "Official recent-search requires X developer access/credits. NEXUS still supports replay/import; optionally configure X_PUBLIC_RSS_URL_TEMPLATE for a public bridge."
+            ),
+            source_mode="LIVE" if SETTINGS.x_public_rss_url_template else "IMPORT",
+        )
+
+    if not SETTINGS.telegram_bot_token:
+        base["telegram"] = ConnectorStatus(
+            platform="telegram",
+            state="READY",
+            detail="Zero-key public-channel preview ingestion is ready. Bot API remains an additional free path for chats visible to your authorized bot.",
+            source_mode="LIVE",
+        )
+    else:
+        base["telegram"] = ConnectorStatus(
+            platform="telegram",
+            state="READY",
+            detail="Bot API live ingestion is configured, and zero-key public-channel preview ingestion is also available.",
+            source_mode="LIVE",
+        )
+
+    if not SETTINGS.youtube_api_key:
+        base["youtube"] = ConnectorStatus(
+            platform="youtube",
+            state="DEGRADED",
+            detail="Zero-key yt-dlp public video-metadata search is available. Add a YouTube Data API key for richer official search/comment ingestion and quota semantics.",
+            source_mode="LIVE",
+        )
+
+    if not (SETTINGS.meta_access_token and SETTINGS.meta_instagram_account_id):
+        base["instagram"] = ConnectorStatus(
+            platform="instagram",
+            state="DEGRADED",
+            detail="Best-effort public-profile fallback is available for genuinely public profiles; official Meta Graph access is preferred and required for stable authorized professional-account data.",
+            source_mode="LIVE",
+        )
+
+    base["bluesky"] = ConnectorStatus(
+        platform="bluesky",
+        state="READY",
+        detail="Public AT Protocol search is available without credentials.",
+        source_mode="LIVE",
+    )
+    base["reddit"] = ConnectorStatus(
+        platform="reddit",
+        state="DEGRADED",
+        detail="Low-volume public JSON search is available where Reddit permits it from the current network; OAuth/import remains the fallback if public JSON is restricted.",
+        source_mode="LIVE",
+    )
+    base["mastodon"] = ConnectorStatus(
+        platform="mastodon",
+        state="DEGRADED",
+        detail=f"Public instance search targets {SETTINGS.mastodon_base_url}; search availability depends on the chosen Mastodon instance policy.",
+        source_mode="LIVE",
+    )
+    return list(base.values())
 
 
 @app.get("/", tags=["system"])
@@ -91,12 +176,12 @@ def root() -> dict[str, str]:
 
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 def health() -> HealthResponse:
-    return HealthResponse(status="ok", service="nexus-ai", version="0.2.0", environment=SETTINGS.nexus_env)
+    return HealthResponse(status="ok", service="nexus-ai", version="0.3.0", environment=SETTINGS.nexus_env)
 
 
 @app.get("/api/connectors/status", tags=["connectors"])
 def get_connector_statuses():
-    return {"connectors": connector_statuses()}
+    return {"connectors": enhanced_connector_statuses()}
 
 
 @app.get("/api/collector/status", tags=["collector"])
@@ -120,7 +205,7 @@ def seed_demo(request: DemoSeedRequest):
         STORE.reset()
     events = seed_demo_events()
     result = ingest(events)
-    result["message"] = "Deterministic fictional demo dataset loaded. X-style records are labelled REPLAY."
+    result["message"] = "Deterministic fictional demo dataset loaded. Replay/import/live source labels remain explicit."
     return result
 
 
@@ -140,8 +225,20 @@ async def ingest_x(request: XSearchRequest):
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
     result = ingest(events)
-    result["platform"] = "x"
-    result["source_mode"] = "LIVE"
+    result.update(platform="x", source_mode="LIVE", connector="official_x_api_v2")
+    return result
+
+
+@app.post("/api/connectors/x/public", tags=["connectors"])
+async def ingest_x_public(request: PublicBridgeRequest):
+    if not request.query.strip() and not request.target.strip():
+        raise HTTPException(status_code=400, detail="Provide query or target for the configured X public bridge.")
+    try:
+        events = await x_public_bridge(request.query, request.target, request.limit)
+    except ConnectorError as exc:
+        raise connector_exception(exc) from exc
+    result = ingest(events)
+    result.update(platform="x", source_mode="LIVE", connector="configured_public_bridge")
     return result
 
 
@@ -152,8 +249,18 @@ async def ingest_telegram(request: TelegramPollRequest):
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
     result = ingest(events)
-    result["platform"] = "telegram"
-    result["source_mode"] = "LIVE"
+    result.update(platform="telegram", source_mode="LIVE", connector="telegram_bot_api")
+    return result
+
+
+@app.post("/api/connectors/telegram/public", tags=["connectors"])
+async def ingest_telegram_public(request: TelegramPublicRequest):
+    try:
+        events = await telegram_public_channel(request.channel, request.limit)
+    except ConnectorError as exc:
+        raise connector_exception(exc) from exc
+    result = ingest(events)
+    result.update(platform="telegram", source_mode="LIVE", connector="telegram_public_preview")
     return result
 
 
@@ -164,8 +271,18 @@ async def ingest_youtube(request: YouTubeSearchRequest):
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
     result = ingest(events)
-    result["platform"] = "youtube"
-    result["source_mode"] = "LIVE"
+    result.update(platform="youtube", source_mode="LIVE", connector="youtube_data_api_v3")
+    return result
+
+
+@app.post("/api/connectors/youtube/free", tags=["connectors"])
+async def ingest_youtube_free(request: PublicSearchRequest):
+    try:
+        events = await youtube_free_search(request.query, min(request.limit, 25))
+    except ConnectorError as exc:
+        raise connector_exception(exc) from exc
+    result = ingest(events)
+    result.update(platform="youtube", source_mode="LIVE", connector="yt_dlp_public_metadata")
     return result
 
 
@@ -176,8 +293,51 @@ async def ingest_meta(request: MetaSyncRequest):
     except ConnectorError as exc:
         raise connector_exception(exc) from exc
     result = ingest(events)
-    result["platform"] = request.source
-    result["source_mode"] = "LIVE"
+    result.update(platform=request.source, source_mode="LIVE", connector="meta_graph_api")
+    return result
+
+
+@app.post("/api/connectors/instagram/public", tags=["connectors"])
+async def ingest_instagram_public(request: InstagramPublicRequest):
+    try:
+        events = await instagram_public_profile(request.profile, request.limit)
+    except ConnectorError as exc:
+        raise connector_exception(exc) from exc
+    result = ingest(events)
+    result.update(platform="instagram", source_mode="LIVE", connector="instaloader_public_profile")
+    return result
+
+
+@app.post("/api/connectors/bluesky/search", tags=["connectors"])
+async def ingest_bluesky(request: PublicSearchRequest):
+    try:
+        events = await bluesky_search(request.query, request.limit)
+    except ConnectorError as exc:
+        raise connector_exception(exc) from exc
+    result = ingest(events)
+    result.update(platform="bluesky", source_mode="LIVE", connector="public_atproto")
+    return result
+
+
+@app.post("/api/connectors/reddit/search", tags=["connectors"])
+async def ingest_reddit(request: PublicSearchRequest):
+    try:
+        events = await reddit_public_search(request.query, request.limit)
+    except ConnectorError as exc:
+        raise connector_exception(exc) from exc
+    result = ingest(events)
+    result.update(platform="reddit", source_mode="LIVE", connector="public_json")
+    return result
+
+
+@app.post("/api/connectors/mastodon/search", tags=["connectors"])
+async def ingest_mastodon(request: MastodonSearchRequest):
+    try:
+        events = await mastodon_search(request.query, request.limit, request.base_url)
+    except ConnectorError as exc:
+        raise connector_exception(exc) from exc
+    result = ingest(events)
+    result.update(platform="mastodon", source_mode="LIVE", connector="public_instance_api")
     return result
 
 
