@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type ChangeEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
   BarChart3,
   Database,
+  Download,
   ExternalLink,
   GitBranch,
-  Languages,
   Network,
   Play,
   Radio,
@@ -14,6 +14,8 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Square,
+  Upload,
   Users,
   Waypoints,
 } from 'lucide-react';
@@ -30,7 +32,9 @@ import {
 import {
   AlertItem,
   api,
+  CollectorStatus,
   ConnectorStatus,
+  DemographicSlice,
   DemographicsResponse,
   GraphNode,
   NarrativeDetail,
@@ -57,12 +61,14 @@ const tabs: Array<{ id: Tab; label: string; icon: typeof Activity }> = [
 const fmt = (value: string | number | null | undefined) => {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 };
 
 const pct = (value: number | null | undefined) => `${Math.round((value || 0) * 100)}%`;
 
-function Badge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'live' }) {
+function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'live' }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
 
@@ -158,7 +164,7 @@ function TimelineView({ points }: { points: TimelinePoint[] }) {
           </AreaChart>
         </ResponsiveContainer>
       </div>
-      <div className="coverage-callout"><ShieldCheck size={18} /> Exact timestamps are preserved from source events; ingestion time is stored separately.</div>
+      <div className="coverage-callout"><ShieldCheck size={18} /> Exact source timestamps are stored separately from ingestion time.</div>
     </section>
   );
 }
@@ -218,8 +224,7 @@ function NetworkGraph({ network }: { network: NetworkResponse | null }) {
   );
 }
 
-function DemographicSliceCard({ title, slice }: { title: string; slice: DemographicsResponse[keyof DemographicsResponse] }) {
-  if (typeof slice !== 'object' || !slice || !('counts' in slice)) return null;
+function DemographicSliceCard({ title, slice }: { title: string; slice: DemographicSlice }) {
   const entries = Object.entries(slice.counts).sort((a, b) => b[1] - a[1]);
   const max = Math.max(1, ...entries.map(([, value]) => value));
   return (
@@ -246,12 +251,16 @@ function NarrativeView({ detail }: { detail: NarrativeDetail | null }) {
       <section className="panel panel-large">
         <div className="section-head">
           <div><div className="eyebrow">{detail.id} · Narrative lineage</div><h2>{detail.title}</h2></div>
-          <Badge tone={detail.trend.status === 'RISING' || detail.trend.status === 'VIRAL' ? 'warn' : 'neutral'}>{detail.trend.status}</Badge>
+          <div className="chip-row">
+            <Badge tone={detail.trend.status === 'RISING' || detail.trend.status === 'VIRAL' ? 'warn' : 'neutral'}>{detail.trend.status}</Badge>
+            <a className="btn btn-secondary" href={api.narrativeCsvUrl(detail.id)}><Download size={14} /> CSV</a>
+            <a className="btn btn-secondary" href={api.narrativeJsonUrl(detail.id)}><Download size={14} /> JSON</a>
+          </div>
         </div>
         <p className="lead">{detail.representative_text}</p>
         <div className="callout"><ShieldCheck size={18} /><span>{detail.origin_claim}</span></div>
         <div className="lineage">
-          {detail.lineage.slice(0, 30).map((item, index) => (
+          {detail.lineage.slice(0, 40).map((item, index) => (
             <div className="lineage-item" key={item.event_id}>
               <div className="lineage-axis"><span>{index + 1}</span></div>
               <div className="lineage-card">
@@ -262,7 +271,9 @@ function NarrativeView({ detail }: { detail: NarrativeDetail | null }) {
                 <strong>{item.author || item.author_pseudo_id || 'Unknown author'}</strong>
                 <p>{item.text}</p>
                 <div className="chip-row"><span className="chip">sentiment: {item.sentiment || 'unknown'}</span><span className="chip">stance: {item.stance || 'unknown'}</span></div>
-                {item.source_url && item.source_url.startsWith('http') && !item.source_url.includes('example.invalid') && <a href={item.source_url} target="_blank" rel="noreferrer">Open source <ExternalLink size={13} /></a>}
+                {item.source_url && item.source_url.startsWith('http') && !item.source_url.includes('example.invalid') && (
+                  <a href={item.source_url} target="_blank" rel="noreferrer">Open source <ExternalLink size={13} /></a>
+                )}
               </div>
             </div>
           ))}
@@ -301,24 +312,27 @@ function App() {
   const [demographics, setDemographics] = useState<DemographicsResponse | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [events, setEvents] = useState<SocialEvent[]>([]);
+  const [collector, setCollector] = useState<CollectorStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const loadAll = useCallback(async () => {
     try {
       setError(null);
-      const [status, overviewData, timeData, narrativeData, networkData, demoData, alertData, eventData] = await Promise.all([
-        api.connectorStatus(), api.overview(), api.timeline(), api.narratives(), api.network(), api.demographics(), api.alerts(), api.events(),
+      const [status, overviewData, timeData, narrativeData, networkData, demographicData, alertData, eventData, collectorData] = await Promise.all([
+        api.connectorStatus(), api.overview(), api.timeline(), api.narratives(), api.network(), api.demographics(), api.alerts(), api.events(), api.collectorStatus(),
       ]);
       setConnectors(status.connectors);
       setOverview(overviewData);
       setTimelinePoints(timeData.points);
       setNarratives(narrativeData.narratives);
       setNetwork(networkData);
-      setDemographics(demoData);
+      setDemographics(demographicData);
       setAlerts(alertData.alerts);
       setEvents(eventData.events);
+      setCollector(collectorData);
       const preferred = selectedNarrativeId || narrativeData.narratives[0]?.id || null;
       if (preferred) {
         setSelectedNarrativeId(preferred);
@@ -329,7 +343,13 @@ function App() {
     }
   }, [selectedNarrativeId]);
 
-  useEffect(() => { void loadAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void loadAll(); }, []); // intentionally initial load only
+
+  useEffect(() => {
+    if (!collector?.running) return;
+    const timer = window.setInterval(() => void loadAll(), 15000);
+    return () => window.clearInterval(timer);
+  }, [collector?.running, loadAll]);
 
   const action = async (label: string, fn: () => Promise<unknown>) => {
     setLoading(true); setError(null); setNotice(null);
@@ -351,11 +371,36 @@ function App() {
       setNarrativeDetail(await api.narrative(id));
       setNetwork(await api.network(id));
       setTab('narrative');
-    } catch (e) { setError(e instanceof Error ? e.message : 'Could not load narrative.'); }
-    finally { setLoading(false); }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load narrative.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const platformEntries = useMemo(() => Object.entries(overview?.platform_mix || {}).sort((a, b) => b[1] - a[1]), [overview]);
+  const importJson = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setLoading(true); setError(null); setNotice(null);
+    try {
+      const parsed = JSON.parse(await file.text());
+      const rows = Array.isArray(parsed) ? parsed : parsed.events;
+      if (!Array.isArray(rows)) throw new Error('JSON must be an event array or an object with an events array.');
+      await api.importEvents(rows);
+      setNotice(`Imported ${rows.length} event record(s). They are labelled IMPORT/REPLAY, never LIVE.`);
+      await loadAll();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Import failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const platformEntries = useMemo(
+    () => Object.entries(overview?.platform_mix || {}).sort((a, b) => b[1] - a[1]),
+    [overview],
+  );
 
   return (
     <div className="app-shell">
@@ -382,7 +427,9 @@ function App() {
         <aside className="sidebar">
           <div className="sidebar-label">ANALYST CONSOLE</div>
           {tabs.map(({ id, label, icon: Icon }) => (
-            <button key={id} className={`nav-item ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}><Icon size={18} /><span>{label}</span>{id === 'alerts' && alerts.length > 0 && <i>{alerts.length}</i>}</button>
+            <button key={id} className={`nav-item ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
+              <Icon size={18} /><span>{label}</span>{id === 'alerts' && alerts.length > 0 && <i>{alerts.length}</i>}
+            </button>
           ))}
           <div className="sidebar-foot">
             <ShieldCheck size={17} />
@@ -401,11 +448,30 @@ function App() {
               </div>
 
               <div className="metric-grid">
-                <Metric icon={Database} label="Observed events" value={overview?.total_events || 0} helper="normalized into one timeline" />
-                <Metric icon={GitBranch} label="Narratives" value={overview?.active_narratives || 0} helper="semantic + time-aware clusters" />
+                <Metric icon={Database} label="Observed events" value={overview?.total_events || 0} helper="one normalized chronology" />
+                <Metric icon={GitBranch} label="Narratives" value={overview?.active_narratives || 0} helper="semantic + temporal clusters" />
                 <Metric icon={Activity} label="Rising" value={overview?.rising_narratives || 0} helper="burst & acceleration detected" />
-                <Metric icon={AlertTriangle} label="Evidence alerts" value={overview?.alerts || 0} helper="every alert links to posts" />
+                <Metric icon={AlertTriangle} label="Evidence alerts" value={overview?.alerts || 0} helper="each alert links to evidence" />
               </div>
+
+              <section className="panel" style={{ marginBottom: 14 }}>
+                <div className="section-head compact">
+                  <div><div className="eyebrow">Collection control</div><h3>Live connectors & continuous monitoring</h3></div>
+                  <Badge tone={collector?.running ? 'live' : 'neutral'}>{collector?.running ? `RUNNING · ${collector.cycles} cycles` : 'STOPPED'}</Badge>
+                </div>
+                <div className="chip-row" style={{ gap: 8 }}>
+                  <button className="btn btn-secondary" disabled={loading} onClick={() => action('Instagram sync complete', () => api.syncMeta('instagram'))}>Instagram</button>
+                  <button className="btn btn-secondary" disabled={loading} onClick={() => action('Facebook Page sync complete', () => api.syncMeta('facebook'))}>Facebook</button>
+                  <button className="btn btn-secondary" disabled={loading} onClick={() => importRef.current?.click()}><Upload size={15} /> Import JSON</button>
+                  <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={(e) => void importJson(e)} />
+                  {!collector?.running ? (
+                    <button className="btn btn-primary" disabled={loading} onClick={() => action('Continuous Telegram collection started', () => api.startCollector(query.trim() || '#RiverLinkUpdate', { telegram: true, x: false, youtube: false, interval: 60 }))}><Radio size={15} /> Start continuous</button>
+                  ) : (
+                    <button className="btn btn-secondary" disabled={loading} onClick={() => action('Continuous collection stopped', api.stopCollector)}><Square size={14} /> Stop collection</button>
+                  )}
+                </div>
+                <div className="coverage-callout"><ShieldCheck size={17} /><span>Continuous mode defaults to free Telegram only. X and YouTube polling stay opt-in to protect credits/quota. Meta buttons require authorized app/account permissions.</span></div>
+              </section>
 
               <div className="overview-grid">
                 <section className="panel panel-span-2">
@@ -429,29 +495,19 @@ function App() {
             </>
           )}
 
-          {tab === 'timeline' && <><div className="page-head"><div><div className="eyebrow">Exact chronology</div><h1>Timeline & sentiment movement</h1><p>See when conversation volume changes and whether emotion shifts with it.</p></div></div><TimelineView points={timelinePoints} /></>}
+          {tab === 'timeline' && <><div className="page-head"><div><div className="eyebrow">Exact chronology</div><h1>Timeline & sentiment movement</h1><p>See when volume changes and whether emotion shifts with it.</p></div></div><TimelineView points={timelinePoints} /></>}
 
-          {tab === 'trends' && (
-            <><div className="page-head"><div><div className="eyebrow">Real-time trend engine</div><h1>Emerging narratives</h1><p>Ranked using volume growth, burst, diversity, cross-platform presence, engagement and recency.</p></div></div><div className="trend-list standalone">{narratives.map((n) => <TrendCard key={n.id} narrative={n} onOpen={() => void openNarrative(n.id)} />)}</div></>
-          )}
+          {tab === 'trends' && <><div className="page-head"><div><div className="eyebrow">Real-time trend engine</div><h1>Emerging narratives</h1><p>Ranked using growth, burst, diversity, cross-platform presence, engagement and recency.</p></div></div><div className="trend-list standalone">{narratives.map((n) => <TrendCard key={n.id} narrative={n} onOpen={() => void openNarrative(n.id)} />)}</div></>}
 
           {tab === 'narrative' && <><div className="page-head"><div><div className="eyebrow">Evidence-backed story</div><h1>Narrative lineage</h1><p>Earliest observed evidence → variants → amplification → sentiment change.</p></div></div><NarrativeView detail={narrativeDetail} /></>}
 
-          {tab === 'network' && (
-            <><div className="page-head"><div><div className="eyebrow">Link analysis</div><h1>How influence moved</h1><p>Centrality and bridge roles describe observed network position — never guilt or intent.</p></div><div className="chip-row"><span className="chip">nodes {network?.summary.nodes || 0}</span><span className="chip">edges {network?.summary.edges || 0}</span><span className="chip">communities {network?.summary.communities || 0}</span></div></div><section className="panel panel-large"><NetworkGraph network={network} /></section></>
-          )}
+          {tab === 'network' && <><div className="page-head"><div><div className="eyebrow">Link analysis</div><h1>How influence moved</h1><p>Centrality and bridge roles describe observed network position — never guilt or intent.</p></div><div className="chip-row"><span className="chip">nodes {network?.summary.nodes || 0}</span><span className="chip">edges {network?.summary.edges || 0}</span><span className="chip">communities {network?.summary.communities || 0}</span></div></div><section className="panel panel-large"><NetworkGraph network={network} /></section></>}
 
-          {tab === 'demographics' && demographics && (
-            <><div className="page-head"><div><div className="eyebrow">Aggregate only</div><h1>Audience signals without individual profiling</h1><p>{demographics.privacy_note}</p></div><Badge tone="good"><ShieldCheck size={13} /> k-anonymity guard</Badge></div><div className="demographic-grid"><DemographicSliceCard title="Language" slice={demographics.language} /><DemographicSliceCard title="Broad geography" slice={demographics.broad_geography} /><DemographicSliceCard title="Professional interests" slice={demographics.professional_interests} /><DemographicSliceCard title="Age brackets" slice={demographics.age_brackets} /></div></>
-          )}
+          {tab === 'demographics' && demographics && <><div className="page-head"><div><div className="eyebrow">Aggregate only</div><h1>Audience signals without individual profiling</h1><p>{demographics.privacy_note}</p></div><Badge tone="good"><ShieldCheck size={13} /> k-anonymity guard</Badge></div><div className="demographic-grid"><DemographicSliceCard title="Language" slice={demographics.language} /><DemographicSliceCard title="Broad geography" slice={demographics.broad_geography} /><DemographicSliceCard title="Professional interests" slice={demographics.professional_interests} /><DemographicSliceCard title="Age brackets" slice={demographics.age_brackets} /></div></>}
 
-          {tab === 'alerts' && (
-            <><div className="page-head"><div><div className="eyebrow">Explainable alerts</div><h1>Why the system raised attention</h1><p>No black-box alarm: each alert includes the trigger components, coverage warning and evidence IDs.</p></div></div><div className="alert-list">{alerts.map((alert) => <div className="panel alert-card" key={alert.alert_id}><div className="section-head compact"><div><div className="eyebrow">{fmt(alert.triggered_at)} · confidence {pct(alert.confidence)}</div><h3>{alert.title}</h3></div><Badge tone={alert.severity === 'high' ? 'bad' : 'warn'}>{alert.severity}</Badge></div><ul>{alert.why_triggered.map((why) => <li key={why}>{why}</li>)}</ul><div className="callout"><ShieldCheck size={16} /><span>{alert.coverage_warning}</span></div><div className="row-between"><span className="muted">{alert.evidence_event_ids.length} evidence events · score {alert.trend_score.toFixed(2)}</span><button className="text-btn" onClick={() => void openNarrative(alert.narrative_id)}>Open evidence →</button></div></div>)}{!alerts.length && <div className="empty">No narrative currently crosses the alert threshold.</div>}</div></>
-          )}
+          {tab === 'alerts' && <><div className="page-head"><div><div className="eyebrow">Explainable alerts</div><h1>Why the system raised attention</h1><p>No black-box alarm: each alert includes trigger components, coverage warning and evidence IDs.</p></div></div><div className="alert-list">{alerts.map((alert) => <div className="panel alert-card" key={alert.alert_id}><div className="section-head compact"><div><div className="eyebrow">{fmt(alert.triggered_at)} · confidence {pct(alert.confidence)}</div><h3>{alert.title}</h3></div><Badge tone={alert.severity === 'high' ? 'bad' : 'warn'}>{alert.severity}</Badge></div><ul>{alert.why_triggered.map((why) => <li key={why}>{why}</li>)}</ul><div className="callout"><ShieldCheck size={16} /><span>{alert.coverage_warning}</span></div><div className="row-between"><span className="muted">{alert.evidence_event_ids.length} evidence events · score {alert.trend_score.toFixed(2)}</span><button className="text-btn" onClick={() => void openNarrative(alert.narrative_id)}>Open evidence →</button></div></div>)}{!alerts.length && <div className="empty">No narrative currently crosses the alert threshold.</div>}</div></>}
 
-          {tab === 'evidence' && (
-            <><div className="page-head"><div><div className="eyebrow">Source traceability</div><h1>Evidence ledger</h1><p>Every normalized event retains platform, original timestamp, source mode and source URL where available.</p></div></div><section className="panel table-panel"><div className="evidence-table"><div className="evidence-row evidence-head"><span>Source</span><span>Time</span><span>Author</span><span>Text</span><span>Inference</span></div>{events.slice(0, 200).map((event) => <div className="evidence-row" key={event.id}><span><PlatformBadge platform={event.platform} /> <SourceBadge mode={event.source_mode} /></span><span>{fmt(event.created_at)}</span><span>{event.author_display || event.author_pseudo_id || '—'}</span><span className="evidence-text">{event.text}</span><span><Badge>{event.sentiment_label || 'unknown'}</Badge> <Badge>{event.stance_label || 'unclear'}</Badge>{event.url && !event.url.includes('example.invalid') && <a className="source-link" href={event.url} target="_blank" rel="noreferrer"><ExternalLink size={13} /></a>}</span></div>)}</div></section></>
-          )}
+          {tab === 'evidence' && <><div className="page-head"><div><div className="eyebrow">Source traceability</div><h1>Evidence ledger</h1><p>Every event retains platform, original timestamp, source mode and source URL where available.</p></div></div><section className="panel table-panel"><div className="evidence-table"><div className="evidence-row evidence-head"><span>Source</span><span>Time</span><span>Author</span><span>Text</span><span>Inference</span></div>{events.slice(0, 200).map((event) => <div className="evidence-row" key={event.id}><span><PlatformBadge platform={event.platform} /> <SourceBadge mode={event.source_mode} /></span><span>{fmt(event.created_at)}</span><span>{event.author_display || event.author_pseudo_id || '—'}</span><span className="evidence-text">{event.text}</span><span><Badge>{event.sentiment_label || 'unknown'}</Badge> <Badge>{event.stance_label || 'unclear'}</Badge>{event.url && !event.url.includes('example.invalid') && <a className="source-link" href={event.url} target="_blank" rel="noreferrer"><ExternalLink size={13} /></a>}</span></div>)}</div></section></>}
         </main>
       </div>
     </div>
