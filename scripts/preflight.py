@@ -31,6 +31,8 @@ REQUIRED = [
     "backend-java/pom.xml",
     "backend-java/src/main/java/in/sih/nexus/controller/GatewayController.java",
     "scripts/start_demo.bat",
+    "scripts/start_full.bat",
+    "scripts/convert_social_export.py",
     "docs/FREE_SOURCE_MATRIX.md",
     "docs/JURY_DEMO_5_MIN.md",
     "docs/FINAL_READINESS_CHECKLIST.md",
@@ -73,17 +75,18 @@ def main() -> int:
             failures += 1
 
     syntax_failures = 0
-    for path in sorted((ROOT / "backend-ai").rglob("*.py")):
-        if any(part in {".venv", "venv", "__pycache__"} for part in path.parts):
-            continue
-        try:
-            ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        except SyntaxError as exc:
-            fail(f"Python syntax: {path.relative_to(ROOT)}:{exc.lineno}: {exc.msg}")
-            failures += 1
-            syntax_failures += 1
+    for root_dir in (ROOT / "backend-ai", ROOT / "scripts"):
+        for path in sorted(root_dir.rglob("*.py")):
+            if any(part in {".venv", "venv", "__pycache__"} for part in path.parts):
+                continue
+            try:
+                ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            except SyntaxError as exc:
+                fail(f"Python syntax: {path.relative_to(ROOT)}:{exc.lineno}: {exc.msg}")
+                failures += 1
+                syntax_failures += 1
     if syntax_failures == 0:
-        ok("Python source and test files parse successfully")
+        ok("Python source, tests and scripts parse successfully")
 
     package_path = ROOT / "frontend" / "package.json"
     try:
