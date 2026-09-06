@@ -2,174 +2,195 @@
 
 **Smart India Hackathon 2026 · SIH26152 · Social Media Analytics · NTRO**
 
-> **We track ideas, not just hashtags.**
+> **We track how narratives emerge, mutate and move — then keep the evidence that proves every conclusion.**
 
-NEXUS is a cross-platform social-media intelligence prototype built for SIH26152. It collects timestamped public/authorized social content, normalizes it into one chronology, infers sentiment/stance/emotion, detects rising narratives, reconstructs their earliest observed evidence and semantic variants, maps amplification networks, and produces explainable alerts that always link back to evidence.
+NEXUS is a free-first, evidence-backed cross-platform social-media analytics framework built for SIH26152. It normalizes public/authorized social data into one chronology and implements the four required analytical vectors:
 
-The system is intentionally honest about data coverage: every event is marked **LIVE**, **REPLAY**, or **IMPORT**. “Origin” always means **earliest observed in the configured/collected dataset**, never an unsupported claim about the absolute origin of a narrative on the internet.
+1. **Sentiment Analysis** — polarity, stance, emotion signals and temporal sentiment movement.
+2. **Privacy-safe Audience/Demographic Profiling** — aggregate language, broad public/self-declared geography and supportable audience attributes with small-group suppression.
+3. **Trend & Narrative Tracking** — semantic narrative clustering, burst/growth scoring, chronology, mutation/correction tracking and cross-platform convergence.
+4. **Link / Network Analysis** — observed interaction topology, PageRank, betweenness, communities, bridge nodes and high-reach nodes.
+
+The framework is deliberately honest about data coverage. Every normalized event is labelled:
+
+- `LIVE` — fetched from a reachable public/authorized source during the run;
+- `REPLAY` — deterministic demo/replayed evidence;
+- `IMPORT` — analyst-supplied public/exported data.
+
+NEXUS never relabels replay/import data as live, never claims private-account access, and uses **“earliest observed in our collected dataset”** rather than claiming absolute internet origin.
 
 ---
 
-## Why NEXUS is different
+## What makes NEXUS different
 
-A normal dashboard asks:
+A normal social dashboard asks:
 
-- Which hashtag is trending?
+- What hashtag is trending?
 - How many mentions exist?
 - Is sentiment positive or negative?
 
 NEXUS asks:
 
-- What narrative is actually emerging even when wording changes?
-- What is the exact observed chronology?
-- How did stance/emotion change over time?
-- Which accounts or communities amplified it?
-- Which nodes bridge otherwise separate communities?
-- How did the narrative migrate across platforms?
-- What source evidence supports every alert?
-- How complete is our collection coverage?
-
-The product thesis is:
-
-> **NEXUS turns disconnected social-media posts into an evidence-backed timeline of how a narrative emerges, spreads, changes sentiment, and moves through communities.**
+- Which *narrative* is emerging even when the wording changes?
+- What is its exact observed chronology?
+- How did sentiment and stance change as it spread?
+- Which observed accounts/communities amplified it?
+- Which nodes bridge otherwise separated communities?
+- How did the narrative move across platforms?
+- What evidence supports the insight?
+- How complete is the collection coverage?
+- Is the evidence strong enough to issue a certificate, or should the system **ABSTAIN**?
 
 ---
 
-## SIH26152 requirement coverage
+# Platform coverage
 
-| Official component | NEXUS implementation |
-|---|---|
-| Continuous Data Collection & Timeline Management | Official X connector, Telegram Bot API, YouTube Data API, authorized Meta connectors, replay/import layer, normalized timestamped `SocialEvent` store, optional continuous collector |
-| Multi-Dimensional Sentiment Inference | polarity + stance + emotion + sarcasm estimate + confidence/method fields; timestamped sentiment timeline |
-| Automated Demographic Profiling | aggregate anonymized language, broad public geography and professional-interest signals with k-anonymity suppression, coverage and confidence |
-| Real-Time Trend & Topic Detection | time-bucket burst score using growth, deviation, author diversity, cross-platform presence, engagement and recency |
-| Link Analysis & Network Topology | NetworkX graph; reply/mention/shared-domain/narrative edges; PageRank, betweenness, communities, bridge/high-reach explanations |
+NEXUS separates **acquisition** from **analytics**. A vendor changing its API does not require rewriting the four analytics engines.
 
-### Platform coverage
+| Platform | Official / richer path | Free / public / resilience path | Default truth |
+|---|---|---|---|
+| **X / Twitter** | X API v2 recent search | configurable permitted RSS/public bridge + JSON import/replay | official live search requires developer access/credits; no fake free API claim |
+| **Telegram** | Telegram Bot API `getUpdates` | **zero-key public-channel preview** (`t.me/s/<channel>`) | strongest zero-cost live demo source |
+| **Instagram** | Meta Graph authorized account sync + **official hashtag discovery** (`ig_hashtag_search → recent_media`) | best-effort genuinely public profile path + import/replay | official path requires applicable Meta permissions/App Review |
+| **YouTube** | YouTube Data API v3 **video-first search + comments where available** | **zero-key yt-dlp public metadata** | a video is retained even when comments are disabled |
+| **Bluesky** | public AT Protocol | same | zero-key public search |
+| **Reddit** | OAuth when configured | public JSON search where permitted + import | endpoint/network policy may restrict anonymous access |
+| **Mastodon** | instance API | public instance search / alternate instance | availability depends on instance policy |
+| **Facebook** | authorized Page Graph API | import/replay | optional additional source |
 
-- **X — essential:** official X API v2 recent-search connector. Live access requires an X developer project/token and applicable API credits. NEXUS caps reads per run and never pretends replay data is live.
-- **Telegram — essential:** live Telegram Bot API connector for a team-controlled/authorized group or channel; free and the preferred live jury source.
-- **Instagram — desirable:** official Meta/Instagram professional-account connector when the app/account has the required permissions.
-- **Facebook — desirable:** official Facebook Page connector when proper Page/app permissions are available.
-- **YouTube — appreciative addition:** search + recent comment ingestion through YouTube Data API v3 when an API key is configured.
-- **Replay/import:** deterministic resilience layer so the complete analytics pipeline remains demonstrable even when a third-party platform restricts access or quota.
+### Important X/Instagram truth
+
+NEXUS does **not** pretend that an unrestricted free live search API exists when a commercial platform does not provide one. For restricted sources, the framework uses the official connector when access exists and otherwise falls back to a permitted public bridge/public-profile path or analyst import/replay. The downstream four-vector analytics remain fully operational.
+
+See: [`docs/FREE_SOURCE_MATRIX.md`](docs/FREE_SOURCE_MATRIX.md)
 
 ---
 
-## Architecture
+# Architecture
 
 ```text
-Official X API ────────┐
-Telegram Bot API ──────┤
-YouTube Data API ──────┤
-Instagram / Meta ──────┤
-Facebook / Meta ───────┤
-CSV / JSON Replay ─────┘
-          │
-          ▼
-   Connector Layer
-          │
-          ▼
-   Normalized SocialEvent Store
-          │
-          ├── Sentiment / stance / emotion
-          ├── Trend & burst engine
-          ├── Narrative clustering / lineage
-          ├── Network / influence engine
-          ├── Aggregate demographic signals
-          └── Explainable alert engine
-          │
-          ▼
-  FastAPI Analytics API (:8000)
-          │
-          ├── direct demo mode
-          │
-          └── Spring Boot gateway (:8080)
-                    │
-                    ▼
-          React + TypeScript Console (:5173)
+ X API / bridge / import ──────┐
+ Telegram Bot / public page ───┤
+ YouTube API / yt-dlp ─────────┤
+ Instagram Graph / public ─────┤
+ Bluesky / Reddit / Mastodon ──┤
+ JSON replay/import ────────────┘
+                │
+                ▼
+       Connector / Normalizer
+                │
+                ▼
+        Canonical SocialEvent
+                │
+                ├── provenance + SHA-256 hash
+                ├── sentiment / stance / emotion
+                ├── semantic narrative clustering
+                ├── burst / trend decomposition
+                ├── graph / influence topology
+                ├── aggregate demographics
+                └── evidence certificate / ABSTAIN
+                │
+                ▼
+       FastAPI analytics (:8000)
+                │
+                ├── direct demo mode
+                │
+                └── optional Spring gateway (:8080)
+                              │
+                              ▼
+               React + TypeScript console (:5173)
 ```
 
-### Hackathon-default runtime
+### Hackathon-default stack
 
-The default demo is intentionally light and free:
-
-- Python + FastAPI
+- Python 3.11+
+- FastAPI
 - SQLite
 - NetworkX
-- scikit-learn TF-IDF/cosine narrative clustering
-- VADER + transparent lexical fallbacks for sentiment/stance/emotion
+- scikit-learn TF-IDF / cosine similarity
+- VADER + transparent lexical fallbacks
 - React + TypeScript + Vite
 - optional Spring Boot gateway
-- no Docker required
+- BeautifulSoup public-page parser
+- yt-dlp zero-key YouTube metadata fallback
+- Instaloader best-effort public Instagram fallback
 
-For a larger deployment, the architecture is designed to move structured/time data to PostgreSQL, graph workloads to Neo4j, and introduce Redis/Kafka only when scale requires them. Those systems are **not necessary to run the jury prototype**.
+**No Docker and no paid LLM are required for the core demo.**
 
 ---
 
-## Fastest way to run on Windows
+# Fastest way to run — Windows
 
-### Prerequisites
+Prerequisites:
 
 - Python 3.11+
 - Node.js 20+
-- Internet connection for first dependency install
+- internet connection for the first dependency install
 - Maven + Java 17 only if you want the optional Spring gateway
 
-### One-click demo
+Run:
 
 ```bat
 scripts\start_demo.bat
 ```
 
-The script:
+The launcher now performs a hard preflight before the UI opens:
 
-1. creates `.env` from `.env.example` if missing;
-2. creates a Python virtual environment;
-3. installs FastAPI dependencies;
+1. creates `.env` from `.env.example` if required;
+2. creates `.venv`;
+3. installs backend dependencies + pytest;
 4. installs frontend dependencies;
-5. starts FastAPI on `127.0.0.1:8000`;
-6. loads the deterministic fictional demo dataset;
-7. starts the React console on `127.0.0.1:5173`;
-8. opens the browser.
+5. checks required project files/configuration;
+6. parses Python source/tests;
+7. runs the backend pytest suite;
+8. runs the strict TypeScript production build;
+9. starts FastAPI;
+10. seeds the deterministic fictional jury dataset;
+11. starts the React analyst console;
+12. opens the browser.
 
-Open manually if needed:
+Open manually if required:
 
 - Analyst console: `http://127.0.0.1:5173`
 - FastAPI docs: `http://127.0.0.1:8000/docs`
-
-### Full stack with Spring Boot
-
-```bat
-scripts\start_full.bat
-```
-
-This additionally starts the Spring gateway at `http://127.0.0.1:8080` and tells the frontend to route requests through it.
+- Health: `http://127.0.0.1:8000/health`
+- Evidence certificates: `http://127.0.0.1:8000/api/certificates`
 
 ---
 
-## Manual run
+# Preflight only
 
-### 1. Environment
+From repository root:
+
+```bat
+python scripts\preflight.py
+```
+
+For the strongest validation, run it through the project venv after dependencies are installed:
+
+```bat
+.venv\Scripts\python scripts\preflight.py
+```
+
+The preflight checks source structure, Python syntax, environment configuration, pytest and the frontend production build when dependencies are available.
+
+---
+
+# Manual run
+
+## Backend
 
 ```bat
 copy .env.example .env
-```
-
-Leave all API tokens blank if you only want the deterministic demo.
-
-### 2. FastAPI
-
-```bat
 python -m venv .venv
-.venv\Scripts\pip install -r backend-ai\requirements.txt
+.venv\Scripts\pip install -r backend-ai\requirements.txt pytest
 cd backend-ai
 ..\.venv\Scripts\python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### 3. Frontend
+## Frontend
 
-In another terminal:
+In a second terminal:
 
 ```bat
 cd frontend
@@ -177,161 +198,211 @@ npm install
 npm run dev
 ```
 
-### 4. Seed demo
+## Seed deterministic demo
 
-Use the UI **Seed Demo** button or POST:
+Use the UI **Seed Demo** button or:
 
-```text
+```http
 POST http://127.0.0.1:8000/api/demo/seed
+Content-Type: application/json
+
 {"reset": true}
 ```
 
 ---
 
-## Live API setup
+# FREE SOURCE LAB
 
-Copy `.env.example` to `.env` and fill only the connectors you can legally/officially use.
+The bar above the analyst console gives the team fast, judge-friendly acquisition controls.
 
-### Telegram — recommended zero-cost live demo
+### `Collect Free Mix`
 
-1. Create a bot using Telegram’s official BotFather.
-2. Put its token in `TELEGRAM_BOT_TOKEN`.
-3. Add the bot to a team-controlled/authorized demo group/channel.
-4. If desired, set `TELEGRAM_ALLOWED_CHAT_IDS` to comma-separated allowed IDs.
-5. Send a few messages in the group.
-6. Click **Telegram** or start **Continuous** collection in NEXUS.
+Runs independent public/zero-key sources concurrently and uses `Promise.allSettled`, so one vendor failure does not kill the whole collection attempt:
 
-NEXUS uses the official Bot API `getUpdates` path. Duplicate updates are harmless because the event store deduplicates platform/source IDs.
+- YouTube zero-key metadata
+- Bluesky public search
+- Reddit public JSON search
+- Mastodon public instance search
+- Telegram public channel if a target is supplied
+- Instagram public profile if a target is supplied
 
-### X — official connector with cost guardrails
+The UI reports which sources succeeded and which were unavailable.
 
-Set:
+### Individual controls
+
+- **Telegram Public** — zero-key public channel preview.
+- **YouTube ₹0** — yt-dlp public search metadata.
+- **Bluesky** — public AT Protocol search.
+- **Reddit** — low-volume public JSON search where permitted.
+- **Mastodon** — public instance search.
+- **IG Hashtag API** — official Meta hashtag discovery when authorized.
+- **Instagram Public** — best-effort public-profile fallback.
+- **X Public Bridge** — configured permitted RSS/public bridge.
+- **Verify Evidence** — summarizes `CERTIFIED` vs `ABSTAIN` narrative certificates.
+
+---
+
+# Live connector configuration
+
+Copy:
+
+```bat
+copy .env.example .env
+```
+
+Fill only the integrations you actually have permission to use.
+
+## Telegram Bot API — free
 
 ```env
-X_BEARER_TOKEN=...
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_ALLOWED_CHAT_IDS=
+```
+
+NEXUS uses `getUpdates`, serializes concurrent polls and advances the update offset so continuous collection does not reread a fixed queue forever. If a webhook conflicts with polling, NEXUS surfaces an explicit error instead of silently failing.
+
+For a zero-key public channel, no token is needed; use **Telegram Public** in the FREE SOURCE LAB.
+
+## YouTube Data API v3
+
+```env
+YOUTUBE_API_KEY=
+```
+
+Official search is **video-first**. Each matching video becomes evidence before comment retrieval is attempted. If comments are disabled/restricted, the video still remains in the dataset.
+
+The zero-key path needs no key and uses public video metadata only.
+
+## X API v2
+
+```env
+X_BEARER_TOKEN=
 X_MAX_RESULTS_PER_RUN=50
 X_MAX_PAGES_PER_RUN=2
 ```
 
-Then enter a query in the analyst bar and press **X Live**.
-
-NEXUS does not scrape behind login or bypass X access controls. If the account has no credits/access, the connector returns an explicit `NO_CREDITS`, `PERMISSION_REQUIRED`, or credential state. For the jury, use the deterministic X-style **REPLAY** records if credits are not available.
-
-### YouTube
-
-Set:
+Optional permitted bridge:
 
 ```env
-YOUTUBE_API_KEY=...
+X_PUBLIC_RSS_URL_TEMPLATE=
 ```
 
-Enter the topic and press **YouTube**. The connector searches a small number of recent videos and ingests accessible top-level comments while respecting configured limits and quota.
+The bridge template may use `{query}` and/or `{target}` placeholders. NEXUS does not ship a hard-coded third-party mirror because availability and permission can change.
 
-### Instagram
-
-Set the authorized Meta credentials:
+## Instagram / Meta Graph
 
 ```env
-META_ACCESS_TOKEN=...
-META_INSTAGRAM_ACCOUNT_ID=...
+META_GRAPH_VERSION=v23.0
+META_ACCESS_TOKEN=
+META_INSTAGRAM_ACCOUNT_ID=
+META_FACEBOOK_PAGE_ID=
 ```
 
-Press **Instagram** on the Overview page. This connector is intentionally scoped to authorized professional-account access and documented fields/permissions.
+With applicable permissions, NEXUS supports:
 
-### Facebook
+- authorized Instagram professional-account media/comments;
+- official hashtag discovery via `ig_hashtag_search` and `recent_media`;
+- authorized Facebook Page feed/comments.
 
-Set:
+The public-profile fallback never bypasses private-account/login controls.
+
+## Mastodon
 
 ```env
-META_ACCESS_TOKEN=...
-META_FACEBOOK_PAGE_ID=...
+MASTODON_BASE_URL=https://mastodon.social
 ```
 
-Press **Facebook** on the Overview page. The connector is scoped to an authorized Facebook Page and applicable app/Page permissions.
+Switch to another instance if the selected instance does not permit anonymous status search.
 
 ---
 
-## Continuous collection
+# Canonical event contract
 
-The backend provides:
+All acquisition paths normalize to one event model containing, where available:
 
-- `GET /api/collector/status`
-- `POST /api/collector/start`
-- `POST /api/collector/stop`
-
-Example:
-
-```json
-{
-  "query": "#ExampleTopic",
-  "interval_seconds": 60,
-  "enable_telegram": true,
-  "enable_x": false,
-  "enable_youtube": false
-}
-```
-
-**Why X is off by default:** continuous X reads can consume paid API credits. **Why YouTube is off by default:** continuous searches consume quota. Telegram is the free-first live collection path.
-
----
-
-## Normalized event contract
-
-All connectors normalize to one `SocialEvent` model with:
-
-- platform + original platform event ID
+- platform
+- original platform event ID
 - event type
-- public author identity where permitted + privacy-preserving pseudonymous ID
+- public author identity + privacy-preserving pseudonymous ID
 - original text
 - language
-- `created_at` and separate `ingested_at`
-- source URL where possible
-- parent/conversation relationships
-- mentions / hashtags / URLs
-- public engagement counters where available
+- `created_at`
+- separate `ingested_at`
+- source URL
+- parent / conversation IDs
+- mentions
+- hashtags
+- URLs/domains
+- engagement counters
 - minimal public profile signals
-- explicit `LIVE | REPLAY | IMPORT` source mode
-- sentiment / emotion / stance / sarcasm estimate
+- explicit `LIVE | REPLAY | IMPORT`
+- connector run ID
+- SHA-256 provenance hash
+- sentiment / stance / emotion values
 - topic terms
 - narrative cluster ID
-- trend score
-- method/confidence fields
+- trend / quality metadata
 
-Platform/source IDs are deduplicated before analytical use.
-
----
-
-## Narrative engine
-
-The current stable demo implementation uses:
-
-- TF-IDF unigrams/bigrams
-- cosine similarity
-- time proximity
-- shared hashtag bonus
-- shared URL/domain bonus
-- connected components for explainable narrative clusters
-
-This deliberately avoids requiring a multi-gigabyte model download during a hackathon. A transformer profile can be added without changing the event/API contract.
-
-**Origin language in the UI is strict:** “earliest observed in our collected dataset.”
+Duplicate `(platform, source_event_id)` records are suppressed.
 
 ---
 
-## Trend engine
+# Vector 1 — Sentiment
 
-The transparent demo score combines:
+NEXUS provides:
+
+- positive / neutral / negative label;
+- continuous sentiment score;
+- stance signal;
+- emotion indicators;
+- sarcasm probability as a secondary signal;
+- timeline-level sentiment movement;
+- alert-level sentiment shift explanations.
+
+The default lightweight path is intentionally local and deterministic enough for a hackathon. Transformer models can be added later without changing the event/API contracts.
+
+---
+
+# Vector 2 — Privacy-safe demographic / audience signals
+
+The demographic endpoint returns **aggregate distributions only**.
+
+Current support includes:
+
+- language;
+- broad geography only from explicit/public source fields;
+- professional-interest fields only where supportable;
+- age bracket only when explicitly/supportably supplied, otherwise unknown;
+- k-anonymity-style suppression of small groups;
+- coverage and confidence.
+
+NEXUS does not generate sensitive protected-trait guesses for named individuals.
+
+---
+
+# Vector 3 — Trends & narrative lineage
+
+NEXUS groups semantically related messages using:
+
+- TF-IDF unigrams/bigrams;
+- cosine similarity;
+- time proximity;
+- shared hashtag evidence;
+- shared URL/domain evidence;
+- connected components.
+
+The explainable trend score combines:
 
 ```text
 0.30 × normalized volume growth
 0.20 × burst deviation
 0.15 × unique-author diversity
 0.15 × cross-platform presence
-0.10 × engagement growth
+0.10 × engagement signal
 0.10 × recency
 ```
 
-Outputs include:
+Statuses include:
 
 - `EMERGING`
 - `RISING`
@@ -339,208 +410,295 @@ Outputs include:
 - `STABLE`
 - `DECLINING`
 
-Every component is returned so the jury can see **why** a trend ranked highly.
+The UI exposes the components rather than returning a black-box trend number.
 
 ---
 
-## Network engine
+# Vector 4 — Link & network analysis
 
-Observed account nodes are linked by available evidence such as:
+Observed edges can include:
 
-- replies
-- mentions
-- shared URL/domain
-- time-bounded narrative co-amplification
+- replies;
+- mentions;
+- shared domains/URLs;
+- time-bounded narrative co-amplification.
 
-NEXUS computes:
+NEXUS calculates:
 
-- weighted degree/degree centrality
-- PageRank
-- betweenness centrality
-- connected communities/components
+- PageRank;
+- betweenness centrality;
+- degree centrality;
+- communities/components.
 
-Labels:
+Roles:
 
-- **High Reach Node** — high interaction centrality in the observed graph
-- **Bridge Node** — high betweenness between observed communities
+- **High Reach Node** — ranks highly by weighted interaction centrality in the observed graph.
+- **Bridge Node** — has high betweenness between observed communities.
+- **Participant** — participates in the observed network without crossing role thresholds.
 
-These are structural labels, **not accusations of intent or maliciousness**.
-
----
-
-## Aggregate demographic signals
-
-NEXUS never shows inferred demographic labels on individual user cards.
-
-The endpoint returns group-level:
-
-- language distribution
-- broad geography only from explicit/public source fields when present
-- professional-interest categories from configured public-profile signals
-- age brackets only when a source explicitly/supportably supplies such a cue; otherwise unknown
-
-Small groups are suppressed using `K_ANON_MIN_GROUP` (default 10). Each panel shows coverage and confidence, including unknown/suppressed buckets.
+These are structural labels, **not accusations of maliciousness, bot status, ideology, or intent**.
 
 ---
 
-## Explainable alerts
+# Evidence Certificate / ABSTAIN layer
 
-An alert contains:
+A central NEXUS differentiator is the replayable evidence certificate.
 
-- narrative + severity
-- trend score
-- trigger reasons
-- evidence event IDs
-- earliest observed evidence
-- top observed amplifiers
-- platform mix
-- sentiment shift
-- confidence
-- explicit coverage warning
+Endpoints:
 
-The analyst can click from the alert directly into the chronological evidence trail.
+```text
+GET /api/certificates
+GET /api/certificates/narrative/{narrative_id}
+GET /api/certificates/alert/{alert_id}
+```
 
----
+A certificate can contain:
 
-## Deterministic jury dataset
+- narrative claim scope;
+- witness posts;
+- witness graph nodes/edges;
+- snapshot SHA-256;
+- witness SHA-256;
+- algorithm/configuration SHA-256;
+- coverage/source-mode distribution;
+- confidence;
+- replay result.
 
-`POST /api/demo/seed` generates a fictional dataset containing:
+Minimum requirements include provenance, timestamps, evidence volume/diversity and a confidence floor. If those conditions fail, the result is:
 
-- a `#RiverLinkUpdate` narrative that starts quietly and accelerates;
-- wording mutation across Telegram/X-style replay/YouTube-style comments;
-- negative/anxious sentiment growth;
-- shared-domain and mention links;
-- a correction/counter-narrative;
-- a stable TechFest background topic;
-- a declining monsoon background topic.
+```text
+ABSTAIN
+```
 
-No real person is accused of anything. Synthetic X-style events are marked `REPLAY`.
-
----
-
-## 2–3 minute jury demo
-
-1. Start with connector status: **Telegram ready/live; X official connector available but replay may be used if credits are absent.**
-2. Press **Seed Demo**.
-3. Open **Timeline** and show the conversation burst + sentiment movement.
-4. Open the top **Trend** and say: “NEXUS is clustering the idea, not only matching the hashtag.”
-5. Open **Narrative** and show earliest observed evidence + variants across platforms.
-6. Open **Network** and show a High Reach / Bridge node with explanation.
-7. Open **Alerts** and show exactly why the alert fired.
-8. Open **Evidence** and point to LIVE/REPLAY/IMPORT labels.
-9. If Telegram is configured, send a fresh team message and poll/start continuous collection to prove live ingestion.
-
-Finish with:
-
-> “The judge can move from a summary claim back to the exact observed evidence, while seeing what is live, replayed, imported, uncertain or unavailable.”
+rather than an unsupported high-impact conclusion.
 
 ---
 
-## Tests
+# API highlights
 
-Python unit tests:
+### System / collection
+
+```text
+GET  /health
+GET  /api/connectors/status
+GET  /api/collector/status
+POST /api/collector/start
+POST /api/collector/stop
+POST /api/demo/seed
+POST /api/ingest/replay
+```
+
+### Required/core platforms
+
+```text
+POST /api/connectors/x/search
+POST /api/connectors/x/public
+POST /api/connectors/telegram/poll
+POST /api/connectors/telegram/public
+POST /api/connectors/youtube/search
+POST /api/connectors/youtube/free
+POST /api/connectors/meta/sync
+POST /api/connectors/instagram/hashtag
+POST /api/connectors/instagram/public
+```
+
+### Additional public sources
+
+```text
+POST /api/connectors/bluesky/search
+POST /api/connectors/reddit/search
+POST /api/connectors/mastodon/search
+```
+
+### Analytics
+
+```text
+GET /api/overview
+GET /api/timeline
+GET /api/trends
+GET /api/narratives
+GET /api/narratives/{id}
+GET /api/network
+GET /api/demographics
+GET /api/alerts
+GET /api/events
+```
+
+### Export / trust
+
+```text
+GET /api/certificates
+GET /api/certificates/narrative/{id}
+GET /api/certificates/alert/{id}
+GET /api/export/narrative/{id}.json
+GET /api/export/narrative/{id}.csv
+```
+
+---
+
+# Continuous collection
+
+Current scheduler endpoints:
+
+```text
+GET  /api/collector/status
+POST /api/collector/start
+POST /api/collector/stop
+```
+
+Example:
+
+```json
+{
+  "query": "#RiverLinkUpdate",
+  "interval_seconds": 60,
+  "enable_telegram": true,
+  "enable_x": false,
+  "enable_youtube": false
+}
+```
+
+X and YouTube are opt-in in continuous mode to protect credits/quota. Telegram is the free-first default.
+
+---
+
+# Optional Spring Boot gateway
+
+For a fuller enterprise-shaped demonstration:
+
+```bat
+scripts\start_full.bat
+```
+
+The Spring gateway proxies:
+
+- core analytics;
+- old official connector endpoints;
+- all new free/public connector endpoints;
+- official Instagram hashtag discovery;
+- evidence-certificate endpoints.
+
+The FastAPI direct mode remains the recommended simplest jury runtime.
+
+---
+
+# Tests
+
+Backend:
 
 ```bat
 cd backend-ai
 ..\.venv\Scripts\python -m pytest -q
+..\.venv\Scripts\python -m compileall -q app
 ```
 
-API smoke test (backend must already be running):
+Coverage includes:
 
-```bat
-python scripts\smoke_test.py
-```
+- text enrichment;
+- deduplication;
+- narrative clustering;
+- network construction;
+- privacy-safe demographics;
+- Telegram public-page parsing;
+- RSS bridge parsing;
+- Telegram Bot API offset advancement;
+- YouTube video retention when comments are disabled;
+- Instagram official hashtag two-step flow;
+- evidence certificates;
+- API contracts.
 
-Frontend production build:
+Frontend:
 
 ```bat
 cd frontend
+npm install
 npm run build
 ```
 
-Spring build:
+Spring gateway:
 
 ```bat
 cd backend-java
-mvn test package
-```
-
-A GitHub Actions workflow is included at `.github/workflows/ci.yml` for automated validation when Actions are enabled for the repository.
-
----
-
-## Project structure
-
-```text
-SOCIAL-MEDIA---PS152/
-├─ prompts/
-│  ├─ MASTER_SUPER_ULTRA_BUILD_PROMPT.md
-│  └─ README.md
-├─ backend-ai/
-│  ├─ app/
-│  │  ├─ analytics.py
-│  │  ├─ collector.py
-│  │  ├─ config.py
-│  │  ├─ connectors.py
-│  │  ├─ db.py
-│  │  ├─ main.py
-│  │  └─ schemas.py
-│  ├─ tests/
-│  └─ requirements.txt
-├─ backend-java/
-│  ├─ pom.xml
-│  └─ src/main/...
-├─ frontend/
-│  ├─ src/
-│  │  ├─ api.ts
-│  │  ├─ App.tsx
-│  │  ├─ main.tsx
-│  │  └─ styles.css
-│  └─ package.json
-├─ scripts/
-│  ├─ start_demo.bat
-│  ├─ start_full.bat
-│  └─ smoke_test.py
-├─ docs/
-├─ .env.example
-├─ .gitignore
-└─ README.md
+mvn -B test package
 ```
 
 ---
 
-## Hard limitations we intentionally disclose
+# 5-minute jury flow
 
-- X live access depends on the official X API account/credits available to the team. NEXUS does not bypass this.
-- Telegram Bot API sees only messages the configured bot is allowed to receive; it is not a universal Telegram archive.
-- Instagram/Facebook coverage is bounded by Meta app/account permissions and review/access rules.
-- YouTube coverage is bounded by search/comment availability and API quota.
-- “Earliest observed” is bounded by configured platform/query/window coverage.
-- Sentiment, sarcasm, stance and demographic signals are probabilistic and must never be treated as ground truth.
-- Graph centrality indicates observed network position, not intent, guilt or truthfulness.
+Use [`docs/JURY_DEMO_5_MIN.md`](docs/JURY_DEMO_5_MIN.md).
 
-These limitations are part of the evidence model rather than hidden from the analyst.
+The recommended flow is:
 
----
+1. open seeded Overview;
+2. run one zero-key live source such as Telegram Public or Bluesky;
+3. show source-mode truthfulness;
+4. show Timeline sentiment movement;
+5. open a rising narrative and its explainable trend decomposition;
+6. show the network bridge/high-reach nodes;
+7. show privacy-safe demographic aggregates;
+8. click **Verify Evidence** or open the certificate endpoint;
+9. finish with the source matrix / zero-cost architecture story.
 
-## Security & privacy
-
-- secrets only in `.env`
-- `.env` is ignored by Git
-- no hard-coded tokens
-- pseudonymous analytical IDs
-- aggregate demographics only
-- small-group suppression
-- public/authorized data only
-- no de-anonymization
-- no access-control bypass
-- no sensitive-trait individual inference
-- source-mode + confidence/coverage disclosures
-
-See `docs/PRIVACY_AND_ETHICS.md` for the complete guardrail model.
+**Do not test every external platform live on stage.** One or two live connectors prove acquisition; deterministic replay proves the full analytics reliably if venue internet/vendor APIs fail.
 
 ---
 
-## Team message
+# Judge / implementation references
 
-NEXUS is not designed to “judge” social-media users. It is designed to help an authorized analyst understand **observed public/authorized information flow** with chronology, uncertainty, network context and evidence.
+- [`docs/PS26152_TRACEABILITY.md`](docs/PS26152_TRACEABILITY.md) — requirement → code → API → UI → demo proof.
+- [`docs/FREE_SOURCE_MATRIX.md`](docs/FREE_SOURCE_MATRIX.md) — official/free/fallback access strategy.
+- [`docs/JURY_DEMO_5_MIN.md`](docs/JURY_DEMO_5_MIN.md) — exact presentation sequence and likely Q&A.
+- [`docs/FINAL_READINESS_CHECKLIST.md`](docs/FINAL_READINESS_CHECKLIST.md) — final laptop checklist.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — deeper architecture notes.
+- [`prompts/MASTER_SUPER_PROMPT.md`](prompts/MASTER_SUPER_PROMPT.md) — master autonomous build prompt.
+
+---
+
+# Cost model
+
+Core deterministic demo:
+
+**₹0 software/API cost**
+
+Free/public live demo paths:
+
+- Telegram public preview — ₹0
+- Telegram Bot API — ₹0
+- Bluesky public protocol — ₹0
+- YouTube yt-dlp metadata — ₹0
+- YouTube Data API — free quota when configured
+- Mastodon public instance — ₹0 where permitted
+- Reddit public JSON — ₹0 where permitted
+
+Potentially restricted/paid/approval-dependent:
+
+- X recent-search API access/credits
+- Meta permissions/App Review for richer Instagram/Facebook discovery
+
+The project never requires a paid LLM for the core SIH demonstration.
+
+---
+
+# Security, privacy and analytical integrity
+
+NEXUS is designed around these rules:
+
+- public or explicitly authorized data only;
+- no credential theft;
+- no private-account bypass;
+- no CAPTCHA/login evasion;
+- no stealth proxy rotation designed to defeat platform controls;
+- no secret values committed to Git;
+- source failures are visible, not hidden;
+- protected/sensitive personal traits are not guessed for named users;
+- graph structure is not treated as proof of intent;
+- coordination signals, where added, are indicators rather than definitive bot attribution;
+- earliest-observed evidence is not called absolute origin;
+- insufficient evidence can produce **ABSTAIN**.
+
+---
+
+## Project thesis
+
+> **NEXUS turns disconnected public social-media evidence into a replayable explanation of what narrative emerged, when it accelerated, how sentiment changed, which observed communities amplified it, and exactly what source evidence supports the conclusion.**
