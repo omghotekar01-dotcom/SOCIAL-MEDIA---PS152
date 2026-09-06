@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 
-from .analytics import alerts as _raw_alerts
+from .alert_engine import persistent_alerts as _raw_alerts
 from .db import EventStore
 from .schemas import AlertOut
 
@@ -19,12 +19,13 @@ def _stable_alert_id(alert: AlertOut) -> str:
 
 
 def stable_alerts(store: EventStore) -> list[AlertOut]:
-    """Return normal alert analytics with replay-stable identifiers.
+    """Return latched alert analytics with replay-stable identifiers.
 
-    The underlying alert score/reasons remain unchanged. Only the ephemeral UUID
-    is replaced with a deterministic ID derived from the narrative + trigger
-    state, allowing `/api/alerts` and `/api/certificates/alert/{id}` to refer to
-    the same alert across independent API calls.
+    A recent threshold crossing remains visible even if the latest trend bucket
+    cools. The ephemeral internal ID is then replaced with a deterministic ID
+    derived from the narrative + trigger state, allowing `/api/alerts` and
+    `/api/certificates/alert/{id}` to refer to the same alert across independent
+    API calls.
     """
     output: list[AlertOut] = []
     for alert in _raw_alerts(store):
