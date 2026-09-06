@@ -112,6 +112,19 @@ class InstagramPublicRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=50)
 
 
+class InstagramHashtagRequest(BaseModel):
+    hashtag: str = Field(min_length=1, max_length=100)
+    limit: int = Field(default=25, ge=1, le=50)
+
+    @field_validator("hashtag")
+    @classmethod
+    def normalize_hashtag(cls, value: str) -> str:
+        normalized = value.strip().lstrip("#").strip()
+        if not normalized or any(ch.isspace() for ch in normalized):
+            raise ValueError("Enter one Instagram hashtag without spaces")
+        return normalized
+
+
 class MastodonSearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=300)
     limit: int = Field(default=25, ge=1, le=40)
