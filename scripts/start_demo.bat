@@ -3,15 +3,26 @@ setlocal
 cd /d "%~dp0.."
 
 echo ============================================================
-echo  NEXUS - SIH26152 DEMO STARTER v0.3
+echo  NEXUS - SIH26152 DEMO STARTER v0.3.1
 echo ============================================================
 
 where python >nul 2>&1
 if errorlevel 1 (
-  echo [ERROR] Python 3.11+ is required and was not found in PATH.
+  echo [ERROR] Python 3.11-3.14 is required and was not found in PATH.
   pause
   exit /b 1
 )
+
+python -c "import sys; exit(0 if (3,11) <= sys.version_info[:2] <= (3,14) else 1)"
+if errorlevel 1 (
+  echo [ERROR] Unsupported Python version. Install/use Python 3.11, 3.12, 3.13, or 3.14.
+  python --version
+  pause
+  exit /b 1
+)
+
+echo [INFO] Python runtime:
+python --version
 
 where node >nul 2>&1
 if errorlevel 1 (
@@ -46,10 +57,11 @@ if not exist ".venv\Scripts\python.exe" (
 )
 
 set "PY=.venv\Scripts\python.exe"
-set "PIP=.venv\Scripts\pip.exe"
 
 echo [2/7] Installing/checking Python dependencies...
-"%PIP%" install -q -r backend-ai\requirements.txt pytest
+"%PY%" -m pip install -q --upgrade pip setuptools wheel
+if errorlevel 1 goto :fail
+"%PY%" -m pip install -q -r backend-ai\requirements.txt pytest
 if errorlevel 1 goto :fail
 
 if not exist "frontend\node_modules" (
