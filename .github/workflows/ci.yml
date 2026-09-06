@@ -1,0 +1,28 @@
+name: NEXUS CI
+
+on:
+  push:
+    branches: [main, nexus/full-build]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NEXUS_DB_URL: sqlite:///./test_nexus.db
+      PSEUDONYM_SALT: ci-nexus-salt
+      NEXUS_ENABLE_TRANSFORMERS: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend-ai/requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && pip install -r backend-ai/requirements.txt
+      - name: Run backend tests
+        working-directory: backend-ai
+        run: pytest -q
