@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -67,6 +68,19 @@ def run(command: list[str], cwd: Path) -> tuple[int, str]:
         return 99, str(exc)
 
 
+def check_node_version(node: str) -> tuple[bool, str]:
+    code, output = run([node, "--version"], ROOT)
+    raw = output.splitlines()[0].strip() if output else ""
+    if code != 0:
+        return False, raw or "unable to execute node --version"
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+).*", raw)
+    if not match:
+        return False, raw or "unrecognized Node version"
+    major, minor, _patch = map(int, match.groups())
+    supported = (major == 20 and minor >= 19) or (major == 22 and minor >= 12) or major > 22
+    return supported, raw
+
+
 def main() -> int:
     failures = 0
     print("NEXUS / SIH26152 PRE-FLIGHT\n")
@@ -101,6 +115,11 @@ def main() -> int:
         else:
             fail("frontend package.json has no build script")
             failures += 1
+        if any(value == "latest" for section in ("dependencies", "devDependencies") for value in package.get(section, {}).values()):
+            fail("frontend package.json still contains moving 'latest' dependencies")
+            failures += 1
+        else:
+            ok("frontend top-level dependencies are version-pinned")
     except Exception as exc:
         fail(f"frontend package.json invalid: {exc}")
         failures += 1
@@ -142,6 +161,18 @@ def main() -> int:
     else:
         warn("Python executable not found")
 
+    node = shutil.which("node")
+    if not node:
+        fail("Node.js not found; Vite 8 requires Node 20.19+ or 22.12+")
+        failures += 1
+    else:
+        supported, version = check_node_version(node)
+        if supported:
+            ok(f"Node runtime compatible with Vite 8: {version}")
+        else:
+            fail(f"Unsupported Node runtime {version}; install Node 20.19+ or 22.12+")
+            failures += 1
+
     npm = shutil.which("npm")
     if npm:
         ok(f"npm available: {npm}")
@@ -156,7 +187,8 @@ def main() -> int:
         else:
             warn("frontend/node_modules absent; run npm install before production build")
     else:
-        warn("npm not found")
+        fail("npm not found")
+        failures += 1
 
     mvn = shutil.which("mvn")
     if mvn:
