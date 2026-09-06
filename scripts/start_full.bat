@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0.."
 
 echo ============================================================
-echo  NEXUS - FULL STACK STARTER v0.3.2
+echo  NEXUS - FULL STACK STARTER v0.3.3
 echo  FastAPI + Spring Gateway + React
 echo ============================================================
 
@@ -63,7 +63,7 @@ call :wait_fastapi
 if errorlevel 1 goto :fail
 
 echo [INFO] Seeding deterministic fictional jury dataset...
-powershell -NoProfile -Command "$body='{""reset"":true}'; Invoke-RestMethod -Uri 'http://127.0.0.1:8000/api/demo/seed' -Method POST -ContentType 'application/json' -Body $body | Out-Null" >nul 2>&1
+"%PY%" scripts\seed_demo.py
 if errorlevel 1 goto :fail
 
 echo [6/8] Validating Spring gateway package...
