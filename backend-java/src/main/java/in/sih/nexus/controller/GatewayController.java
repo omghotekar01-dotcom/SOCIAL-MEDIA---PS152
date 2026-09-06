@@ -65,7 +65,8 @@ public class GatewayController {
             "/api/network",
             "/api/demographics",
             "/api/alerts",
-            "/api/events"
+            "/api/events",
+            "/api/certificates"
     })
     public ResponseEntity<String> proxyGet(
             jakarta.servlet.http.HttpServletRequest request,
@@ -85,13 +86,30 @@ public class GatewayController {
         return get("/api/events/" + id, Map.of());
     }
 
+    @GetMapping("/api/certificates/narrative/{id}")
+    public ResponseEntity<String> narrativeCertificate(@PathVariable String id) {
+        return get("/api/certificates/narrative/" + id, Map.of());
+    }
+
+    @GetMapping("/api/certificates/alert/{id}")
+    public ResponseEntity<String> alertCertificate(@PathVariable String id) {
+        return get("/api/certificates/alert/" + id, Map.of());
+    }
+
     @PostMapping({
             "/api/demo/seed",
             "/api/ingest/replay",
             "/api/connectors/x/search",
+            "/api/connectors/x/public",
             "/api/connectors/telegram/poll",
+            "/api/connectors/telegram/public",
             "/api/connectors/youtube/search",
-            "/api/connectors/meta/sync"
+            "/api/connectors/youtube/free",
+            "/api/connectors/meta/sync",
+            "/api/connectors/instagram/public",
+            "/api/connectors/bluesky/search",
+            "/api/connectors/reddit/search",
+            "/api/connectors/mastodon/search"
     })
     public ResponseEntity<String> proxyPost(
             jakarta.servlet.http.HttpServletRequest request,
