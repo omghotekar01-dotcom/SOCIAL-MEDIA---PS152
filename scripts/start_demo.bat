@@ -13,9 +13,23 @@ if errorlevel 1 (
   exit /b 1
 )
 
+where node >nul 2>&1
+if errorlevel 1 (
+  echo [ERROR] Node.js is required and was not found in PATH.
+  pause
+  exit /b 1
+)
+node -e "const [M,m]=process.versions.node.split('.').map(Number);process.exit(((M===20&&m>=19)||(M===22&&m>=12)||M>22)?0:1)"
+if errorlevel 1 (
+  echo [ERROR] Vite 8 requires Node.js 20.19+ or 22.12+. Current version:
+  node --version
+  pause
+  exit /b 1
+)
+
 where npm >nul 2>&1
 if errorlevel 1 (
-  echo [ERROR] Node.js/npm is required and was not found in PATH.
+  echo [ERROR] npm is required and was not found in PATH.
   pause
   exit /b 1
 )
