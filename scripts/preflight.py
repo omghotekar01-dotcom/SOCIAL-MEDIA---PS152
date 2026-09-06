@@ -4,7 +4,6 @@ import ast
 import json
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,15 +13,26 @@ REQUIRED = [
     "backend-ai/app/analytics.py",
     "backend-ai/app/connectors.py",
     "backend-ai/app/free_connectors.py",
+    "backend-ai/app/youtube_official.py",
+    "backend-ai/app/meta_discovery.py",
     "backend-ai/app/certificates.py",
     "backend-ai/app/schemas.py",
     "backend-ai/requirements.txt",
+    "backend-ai/tests/test_core.py",
+    "backend-ai/tests/test_free_connectors.py",
+    "backend-ai/tests/test_telegram_polling.py",
+    "backend-ai/tests/test_youtube_official.py",
+    "backend-ai/tests/test_meta_discovery.py",
     "frontend/src/App.tsx",
     "frontend/src/FreeConnectorPanel.tsx",
     "frontend/src/api.ts",
     "frontend/package.json",
     "backend-java/pom.xml",
+    "backend-java/src/main/java/in/sih/nexus/controller/GatewayController.java",
     "scripts/start_demo.bat",
+    "docs/FREE_SOURCE_MATRIX.md",
+    "docs/JURY_DEMO_5_MIN.md",
+    "docs/FINAL_READINESS_CHECKLIST.md",
     "prompts/MASTER_SUPER_PROMPT.md",
 ]
 
@@ -60,6 +70,7 @@ def main() -> int:
             fail(f"missing required file: {rel}")
             failures += 1
 
+    syntax_failures = 0
     for path in sorted((ROOT / "backend-ai").rglob("*.py")):
         if any(part in {".venv", "venv", "__pycache__"} for part in path.parts):
             continue
@@ -68,8 +79,9 @@ def main() -> int:
         except SyntaxError as exc:
             fail(f"Python syntax: {path.relative_to(ROOT)}:{exc.lineno}: {exc.msg}")
             failures += 1
-    if failures == 0:
-        ok("Python source files parse successfully")
+            syntax_failures += 1
+    if syntax_failures == 0:
+        ok("Python source and test files parse successfully")
 
     package_path = ROOT / "frontend" / "package.json"
     try:
@@ -89,6 +101,7 @@ def main() -> int:
         "TELEGRAM_BOT_TOKEN",
         "YOUTUBE_API_KEY",
         "META_ACCESS_TOKEN",
+        "META_INSTAGRAM_ACCOUNT_ID",
         "X_PUBLIC_RSS_URL_TEMPLATE",
         "MASTODON_BASE_URL",
     }
@@ -104,11 +117,10 @@ def main() -> int:
     if python:
         ok(f"Python available: {python}")
         backend = ROOT / "backend-ai"
-        # Full tests are optional here because dependency installation may not have happened yet.
         try:
             import pytest  # noqa: F401
         except Exception:
-            warn("pytest not installed in this interpreter; run backend requirements then pytest -q")
+            warn("pytest not installed in this interpreter; install backend requirements plus pytest")
         else:
             code, output = run([python, "-m", "pytest", "-q"], backend)
             if code == 0:
