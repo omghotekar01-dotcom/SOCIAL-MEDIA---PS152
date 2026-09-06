@@ -7,7 +7,17 @@ from uuid import uuid4
 from pydantic import BaseModel, Field, field_validator
 
 
-Platform = Literal["x", "telegram", "youtube", "instagram", "facebook", "reddit", "replay"]
+Platform = Literal[
+    "x",
+    "telegram",
+    "youtube",
+    "instagram",
+    "facebook",
+    "reddit",
+    "bluesky",
+    "mastodon",
+    "replay",
+]
 SourceMode = Literal["LIVE", "REPLAY", "IMPORT"]
 
 
@@ -79,6 +89,33 @@ class XSearchRequest(BaseModel):
 
 class TelegramPollRequest(BaseModel):
     max_updates: int = Field(default=50, ge=1, le=100)
+
+
+class TelegramPublicRequest(BaseModel):
+    channel: str = Field(min_length=4, max_length=64)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
+class PublicSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=300)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
+class PublicBridgeRequest(BaseModel):
+    query: str = Field(default="", max_length=300)
+    target: str = Field(default="", max_length=200)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
+class InstagramPublicRequest(BaseModel):
+    profile: str = Field(min_length=1, max_length=30)
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class MastodonSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=300)
+    limit: int = Field(default=25, ge=1, le=40)
+    base_url: str | None = Field(default=None, max_length=300)
 
 
 class YouTubeSearchRequest(BaseModel):
