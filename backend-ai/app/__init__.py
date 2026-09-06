@@ -1,14 +1,18 @@
 """NEXUS FastAPI analytics package for SIH26152.
 
-The package keeps connector-specific upgrades behind the stable connector API so
-callers such as the continuous collector and FastAPI routes do not need to know
-which implementation version is active.
+Stable public contracts are preserved while hardened implementations replace
+older internal functions before FastAPI/collector modules import them.
 """
 
+from . import analytics as analytics
 from . import connectors as connectors
+from .stable_alerts import stable_alerts
 from .youtube_official import youtube_official_search
 
-# Preserve the public connector contract while using the video-first YouTube
-# implementation everywhere. This also fixes continuous collection because
-# collector.py imports youtube_search from the same connector module.
+# Make alert identifiers replay-stable so an alert returned by `/api/alerts` can
+# be resolved by `/api/certificates/alert/{id}` on a later independent request.
+analytics.alerts = stable_alerts
+
+# Preserve the connector API while using the video-first YouTube implementation
+# everywhere, including continuous collection.
 connectors.youtube_search = youtube_official_search
