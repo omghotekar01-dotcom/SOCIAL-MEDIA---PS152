@@ -101,6 +101,25 @@ class PublicSearchRequest(BaseModel):
     limit: int = Field(default=25, ge=1, le=100)
 
 
+class WorkspaceSearchRequest(BaseModel):
+    """A fresh analyst search workspace.
+
+    A normal search replaces the previous result pool before collecting the new
+    topic, which prevents unrelated searches from colliding in analytics.
+    Individual connector buttons can still append evidence afterwards.
+    """
+
+    query: str = Field(min_length=1, max_length=300)
+    reset: bool = True
+    limit_per_source: int = Field(default=15, ge=1, le=40)
+    enable_youtube: bool = True
+    enable_bluesky: bool = True
+    enable_reddit: bool = True
+    enable_mastodon: bool = True
+    telegram_channel: str | None = Field(default=None, max_length=64)
+    instagram_profile: str | None = Field(default=None, max_length=30)
+
+
 class PublicBridgeRequest(BaseModel):
     query: str = Field(default="", max_length=300)
     target: str = Field(default="", max_length=200)
