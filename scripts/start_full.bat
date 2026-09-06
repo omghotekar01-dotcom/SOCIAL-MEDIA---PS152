@@ -3,14 +3,22 @@ setlocal
 cd /d "%~dp0.."
 
 echo ============================================================
-echo  NEXUS - FULL STACK STARTER v0.3
+echo  NEXUS - FULL STACK STARTER v0.3.2
 echo  FastAPI + Spring Gateway + React
- echo ============================================================
+echo ============================================================
 
 where python >nul 2>&1
-if errorlevel 1 (echo [ERROR] Python 3.11+ missing.& pause& exit /b 1)
+if errorlevel 1 (echo [ERROR] Python 3.11-3.14 missing.& pause& exit /b 1)
+python -c "import sys; exit(0 if (3,11) <= sys.version_info[:2] <= (3,14) else 1)"
+if errorlevel 1 (echo [ERROR] Unsupported Python version.& python --version& pause& exit /b 1)
+
+where node >nul 2>&1
+if errorlevel 1 (echo [ERROR] Node.js missing.& pause& exit /b 1)
+node -e "const [M,m]=process.versions.node.split('.').map(Number);process.exit(((M===20&&m>=19)||(M===22&&m>=12)||M>22)?0:1)"
+if errorlevel 1 (echo [ERROR] Vite 8 requires Node.js 20.19+ or 22.12+.& node --version& pause& exit /b 1)
+
 where npm >nul 2>&1
-if errorlevel 1 (echo [ERROR] Node.js/npm missing.& pause& exit /b 1)
+if errorlevel 1 (echo [ERROR] npm missing.& pause& exit /b 1)
 where mvn >nul 2>&1
 if errorlevel 1 (echo [ERROR] Maven missing. Use scripts\start_demo.bat if the Java gateway is not required.& pause& exit /b 1)
 where java >nul 2>&1
@@ -28,10 +36,11 @@ if not exist ".venv\Scripts\python.exe" (
 )
 
 set "PY=.venv\Scripts\python.exe"
-set "PIP=.venv\Scripts\pip.exe"
 
 echo [2/8] Installing/checking Python dependencies...
-"%PIP%" install -q -r backend-ai\requirements.txt pytest
+"%PY%" -m pip install -q --upgrade pip setuptools wheel
+if errorlevel 1 goto :fail
+"%PY%" -m pip install -q -r backend-ai\requirements.txt pytest
 if errorlevel 1 goto :fail
 
 if not exist "frontend\node_modules" (
@@ -49,7 +58,7 @@ echo [4/8] Running project preflight...
 if errorlevel 1 goto :fail
 
 echo [5/8] Starting FastAPI analytics service...
-start "NEXUS FastAPI" cmd /k "cd /d "%CD%\backend-ai" ^&^& "%CD%\.venv\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+start "NEXUS FastAPI" /D "%CD%\backend-ai" "%CD%\.venv\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 call :wait_fastapi
 if errorlevel 1 goto :fail
 
@@ -64,12 +73,12 @@ if errorlevel 1 (popd& goto :fail)
 popd
 
 echo [7/8] Starting Spring gateway...
-start "NEXUS Spring Gateway" cmd /k "cd /d "%CD%\backend-java" ^&^& mvn spring-boot:run"
+start "NEXUS Spring Gateway" /D "%CD%\backend-java" cmd.exe /k mvn spring-boot:run
 call :wait_gateway
 if errorlevel 1 goto :fail
 
 echo [8/8] Starting React console through Spring gateway...
-start "NEXUS Frontend" cmd /k "cd /d "%CD%\frontend" ^&^& set VITE_USE_JAVA_GATEWAY=true ^&^& npm run dev"
+start "NEXUS Frontend" /D "%CD%\frontend" cmd.exe /k "set VITE_USE_JAVA_GATEWAY=true&&npm run dev"
 timeout /t 3 /nobreak >nul
 start "" http://127.0.0.1:5173
 
