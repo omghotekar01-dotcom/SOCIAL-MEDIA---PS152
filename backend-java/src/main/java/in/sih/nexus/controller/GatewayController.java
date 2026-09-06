@@ -106,6 +106,7 @@ public class GatewayController {
             "/api/connectors/youtube/search",
             "/api/connectors/youtube/free",
             "/api/connectors/meta/sync",
+            "/api/connectors/instagram/hashtag",
             "/api/connectors/instagram/public",
             "/api/connectors/bluesky/search",
             "/api/connectors/reddit/search",
