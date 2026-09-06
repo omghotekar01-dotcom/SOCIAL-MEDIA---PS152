@@ -4,6 +4,7 @@ import ast
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +34,7 @@ REQUIRED = [
     "docs/FREE_SOURCE_MATRIX.md",
     "docs/JURY_DEMO_5_MIN.md",
     "docs/FINAL_READINESS_CHECKLIST.md",
+    "docs/PS26152_TRACEABILITY.md",
     "prompts/MASTER_SUPER_PROMPT.md",
 ]
 
@@ -113,9 +115,9 @@ def main() -> int:
     else:
         ok(".env.example exposes official + free/public connector configuration")
 
-    python = shutil.which("python") or shutil.which("python3")
+    python = sys.executable or shutil.which("python") or shutil.which("python3")
     if python:
-        ok(f"Python available: {python}")
+        ok(f"Python active interpreter: {python}")
         backend = ROOT / "backend-ai"
         try:
             import pytest  # noqa: F401
