@@ -111,13 +111,20 @@ class EventStore:
         return hashlib.sha256(basis.encode("utf-8")).hexdigest()
 
     def insert(self, event_in: SocialEventIn, derived: dict | None = None) -> SocialEvent | None:
-        derived = derived or {}
-        event = SocialEvent(
-            **event_in.model_dump(),
-            author_pseudo_id=self._pseudo(event_in.platform, event_in.author_platform_id, event_in.author_display),
-            raw_hash=self.raw_hash(event_in),
-            **derived,
+        # Build one payload before validation instead of expanding two mappings into
+        # SocialEvent(...). Some normalized/derived fields (for example `language`)
+        # intentionally overlap source fields; derived values should win without
+        # causing Python's "multiple values for keyword argument" TypeError.
+        event_data = event_in.model_dump()
+        event_data.update(derived or {})
+        event_data["author_pseudo_id"] = self._pseudo(
+            event_in.platform,
+            event_in.author_platform_id,
+            event_in.author_display,
         )
+        event_data["raw_hash"] = self.raw_hash(event_in)
+        event = SocialEvent(**event_data)
+
         payload = event.model_dump(mode="json")
         columns = list(payload.keys())
         values = []
