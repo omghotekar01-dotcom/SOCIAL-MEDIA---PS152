@@ -23,11 +23,13 @@ class Settings(BaseSettings):
     nexus_cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080"
     k_anon_min_group: int = 10
     pseudonym_salt: str = "change-me-for-non-demo-use"
+    public_http_timeout_seconds: int = 15
 
     x_bearer_token: str = ""
     x_max_results_per_run: int = 50
     x_max_pages_per_run: int = 2
     x_request_timeout_seconds: int = 15
+    x_public_rss_url_template: str = ""
 
     telegram_bot_token: str = ""
     telegram_allowed_chat_ids: str = ""
@@ -45,11 +47,14 @@ class Settings(BaseSettings):
     meta_access_token: str = ""
     meta_instagram_account_id: str = ""
     meta_facebook_page_id: str = ""
+    instagram_public_rss_url_template: str = ""
 
     reddit_client_id: str = ""
     reddit_client_secret: str = ""
-    reddit_user_agent: str = "NEXUS-SIH26152/0.1"
-    reddit_enabled: bool = False
+    reddit_user_agent: str = "NEXUS-SIH26152/0.3"
+    reddit_enabled: bool = True
+
+    mastodon_base_url: str = "https://mastodon.social"
 
     nexus_enable_transformers: bool = False
     nexus_sentiment_model: str = "cardiffnlp/twitter-roberta-base-sentiment-latest"
