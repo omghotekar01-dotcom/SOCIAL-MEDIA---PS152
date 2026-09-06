@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0.."
 
 echo ============================================================
-echo  NEXUS - SIH26152 DEMO STARTER v0.3.1
+echo  NEXUS - SIH26152 DEMO STARTER v0.3.2
 echo ============================================================
 
 where python >nul 2>&1
@@ -85,7 +85,7 @@ if errorlevel 1 (
 )
 
 echo [5/7] Starting FastAPI analytics service...
-start "NEXUS FastAPI" cmd /k "cd /d "%CD%\backend-ai" ^&^& "%CD%\.venv\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+start "NEXUS FastAPI" /D "%CD%\backend-ai" "%CD%\.venv\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 call :wait_for_api
 if errorlevel 1 goto :fail
@@ -98,7 +98,7 @@ if errorlevel 1 (
 )
 
 echo [7/7] Starting React analyst console...
-start "NEXUS Frontend" cmd /k "cd /d "%CD%\frontend" ^&^& npm run dev"
+start "NEXUS Frontend" /D "%CD%\frontend" cmd.exe /k npm run dev
 
 timeout /t 3 /nobreak >nul
 start "" http://127.0.0.1:5173
