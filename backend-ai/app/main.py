@@ -19,6 +19,7 @@ from .analytics import (
     seed_demo_events,
     timeline,
 )
+from .collector import COLLECTOR, CollectorStartRequest
 from .config import get_settings
 from .connectors import ConnectorError, connector_statuses, meta_sync, telegram_poll, x_recent_search, youtube_search
 from .db import get_store
@@ -41,7 +42,7 @@ STORE = get_store()
 app = FastAPI(
     title="NEXUS — Narrative & Influence Intelligence",
     description="SIH26152 social-media analytics engine with evidence-aware narrative lineage.",
-    version="0.1.0",
+    version="0.2.0",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -90,12 +91,27 @@ def root() -> dict[str, str]:
 
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 def health() -> HealthResponse:
-    return HealthResponse(status="ok", service="nexus-ai", version="0.1.0", environment=SETTINGS.nexus_env)
+    return HealthResponse(status="ok", service="nexus-ai", version="0.2.0", environment=SETTINGS.nexus_env)
 
 
 @app.get("/api/connectors/status", tags=["connectors"])
 def get_connector_statuses():
     return {"connectors": connector_statuses()}
+
+
+@app.get("/api/collector/status", tags=["collector"])
+def collector_status():
+    return COLLECTOR.status()
+
+
+@app.post("/api/collector/start", tags=["collector"])
+async def collector_start(request: CollectorStartRequest):
+    return await COLLECTOR.start(request)
+
+
+@app.post("/api/collector/stop", tags=["collector"])
+async def collector_stop():
+    return await COLLECTOR.stop()
 
 
 @app.post("/api/demo/seed", tags=["demo"])
@@ -112,7 +128,6 @@ def seed_demo(request: DemoSeedRequest):
 def ingest_replay(request: ReplayImportRequest):
     safe_events: list[SocialEventIn] = []
     for event in request.events:
-        # User-supplied/import endpoint must never be able to mark imported records as live.
         mode = "REPLAY" if event.source_mode == "REPLAY" else "IMPORT"
         safe_events.append(event.model_copy(update={"source_mode": mode}))
     return ingest(safe_events)
@@ -264,13 +279,12 @@ def export_narrative_json(narrative_id: str):
     events = STORE.list_events(limit=5000, narrative_id=narrative_id)
     if not events:
         raise HTTPException(status_code=404, detail="Narrative not found")
-    payload = {
+    return {
         "generated_at": datetime.now(timezone.utc),
         "narrative_id": narrative_id,
         "scope_note": "Earliest observed means earliest in collected data. LIVE/REPLAY/IMPORT labels are preserved.",
         "events": [e.model_dump(mode="json") for e in events],
     }
-    return payload
 
 
 @app.get("/api/export/narrative/{narrative_id}.csv", tags=["export"])
