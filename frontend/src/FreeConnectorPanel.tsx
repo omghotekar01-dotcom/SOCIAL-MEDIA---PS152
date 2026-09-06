@@ -2,7 +2,7 @@ import { type CSSProperties, useState } from 'react';
 import { BadgeCheck, Radio, ShieldCheck, Wifi, X as CloseIcon } from 'lucide-react';
 import { API_BASE } from './api';
 
-type ActionName = 'telegram' | 'youtube' | 'bluesky' | 'reddit' | 'mastodon' | 'instagram' | 'x' | 'mix' | 'verify';
+type ActionName = 'telegram' | 'youtube' | 'bluesky' | 'reddit' | 'mastodon' | 'instagram' | 'instagramTag' | 'x' | 'mix' | 'verify';
 
 const buttonStyle: CSSProperties = {
   border: '1px solid rgba(130,155,210,.28)',
@@ -147,6 +147,8 @@ export default function FreeConnectorPanel() {
     );
   }
 
+  const cleanHashtag = query.trim().replace(/^#/, '');
+
   return (
     <section style={{
       position: 'relative', zIndex: 40, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
@@ -156,10 +158,10 @@ export default function FreeConnectorPanel() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginRight: 5 }}>
         <Radio size={15} />
         <strong style={{ fontSize: 12, letterSpacing: '.08em' }}>FREE SOURCE LAB</strong>
-        <span style={{ fontSize: 11, opacity: .65 }}>public / zero-key</span>
+        <span style={{ fontSize: 11, opacity: .65 }}>public / zero-key + official options</span>
       </div>
 
-      <input style={inputStyle} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="topic / search query" />
+      <input style={inputStyle} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="topic / #hashtag / search query" />
       <input style={{ ...inputStyle, maxWidth: 220 }} value={target} onChange={(e) => setTarget(e.target.value)} placeholder="channel/profile (optional)" />
 
       <button style={primaryButtonStyle} disabled={!!busy || !query.trim()} onClick={() => void runMix()}><Wifi size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Collect Free Mix</button>
@@ -168,6 +170,7 @@ export default function FreeConnectorPanel() {
       <button style={buttonStyle} disabled={!!busy || !query.trim()} onClick={() => run('bluesky', () => post('/api/connectors/bluesky/search', { query: query.trim(), limit: 25 }))}>Bluesky</button>
       <button style={buttonStyle} disabled={!!busy || !query.trim()} onClick={() => run('reddit', () => post('/api/connectors/reddit/search', { query: query.trim(), limit: 25 }))}>Reddit</button>
       <button style={buttonStyle} disabled={!!busy || !query.trim()} onClick={() => run('mastodon', () => post('/api/connectors/mastodon/search', { query: query.trim(), limit: 25, base_url: null }))}>Mastodon</button>
+      <button style={buttonStyle} disabled={!!busy || !cleanHashtag || cleanHashtag.includes(' ')} onClick={() => run('instagramTag', () => post('/api/connectors/instagram/hashtag', { hashtag: cleanHashtag, limit: 20 }))}>IG Hashtag API</button>
       <button style={buttonStyle} disabled={!!busy || !target.trim()} onClick={() => run('instagram', () => post('/api/connectors/instagram/public', { profile: target.trim().replace(/^@/, ''), limit: 12 }))}>Instagram Public</button>
       <button style={buttonStyle} disabled={!!busy || (!query.trim() && !target.trim())} onClick={() => run('x', () => post('/api/connectors/x/public', { query: query.trim(), target: target.trim(), limit: 25 }))}>X Public Bridge</button>
       <button style={buttonStyle} disabled={!!busy} onClick={() => void verifyEvidence()}><BadgeCheck size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Verify Evidence</button>
