@@ -19,14 +19,19 @@ function initials(value?: string | null) {
   return (parts.length > 1 ? `${parts[0][0]}${parts[1][0]}` : clean.slice(0, 2)).toUpperCase();
 }
 
+function youtubeVideoId(event: SocialEvent): string {
+  if (event.platform !== 'youtube') return '';
+  const explicit = String(event.public_profile?.video_id || event.conversation_id || '').trim();
+  if (explicit) return explicit;
+  const match = (event.url || '').match(/[?&]v=([^&]+)/);
+  return match?.[1] || '';
+}
+
 function youtubeEmbed(event: SocialEvent): string {
   const explicit = profileValue(event, 'embed_url');
   if (explicit.includes('youtube.com/embed/')) return explicit;
-  if (event.platform !== 'youtube') return '';
-  const videoId = String(event.public_profile?.video_id || event.conversation_id || '').trim();
-  if (videoId) return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}`;
-  const match = (event.url || '').match(/[?&]v=([^&]+)/);
-  return match ? `https://www.youtube.com/embed/${encodeURIComponent(match[1])}` : '';
+  const videoId = youtubeVideoId(event);
+  return videoId ? `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` : '';
 }
 
 function avatarUrl(event: SocialEvent) {
@@ -34,7 +39,13 @@ function avatarUrl(event: SocialEvent) {
 }
 
 function thumbnailUrl(event: SocialEvent) {
-  return profileValue(event, 'thumbnail_url') || profileValue(event, 'media_url');
+  const explicit = profileValue(event, 'thumbnail_url');
+  if (explicit) return explicit;
+  const videoId = youtubeVideoId(event);
+  if (videoId) return `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`;
+  const media = profileValue(event, 'media_url');
+  const mediaKind = String(event.public_profile?.media_kind || '');
+  return media && mediaKind !== 'video' ? media : '';
 }
 
 function prettyKey(key: string) {
