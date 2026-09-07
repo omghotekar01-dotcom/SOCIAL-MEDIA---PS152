@@ -54,7 +54,7 @@ def main() -> int:
     print("No secret values are printed. You can send this output for debugging.\n")
 
     if not ENV_FILE.exists():
-        print("[NEEDS SETUP] .env is missing. Run: copy .env.example .env\n")
+        print("[INFO] .env is missing; safe built-in demo defaults are still available.\n")
 
     backend_ok, backend_detail = health()
     status("Backend", backend_ok, backend_detail)
@@ -62,12 +62,12 @@ def main() -> int:
     status("Node", shutil.which("node") is not None, shutil.which("node") or "not found")
 
     print("\nPRIMARY SIH SOURCE READINESS")
-    raw_channels = env.get("TELEGRAM_PUBLIC_CHANNELS", "")
+    raw_channels = env.get("TELEGRAM_PUBLIC_CHANNELS", "").strip() or "NexusSIHDemo"
     channels = [item.strip().lstrip("@").strip("/") for item in raw_channels.replace(";", ",").split(",") if item.strip()]
     status(
         "Telegram monitored",
         bool(channels),
-        f"{len(channels)} public channel(s) configured for automatic Fresh Search" if channels else "set TELEGRAM_PUBLIC_CHANNELS=channel1,channel2 in local .env",
+        f"{len(channels)} public channel(s): {', '.join(channels[:5])} · automatic Fresh Search" if channels else "no monitored channels configured",
     )
     status(
         "Telegram public manual",
@@ -77,7 +77,7 @@ def main() -> int:
     status(
         "Telegram Bot API",
         present(env, "TELEGRAM_BOT_TOKEN"),
-        "bot token configured for authorized live channel/chat updates" if present(env, "TELEGRAM_BOT_TOKEN") else "optional but recommended for your controlled live demo channel",
+        "bot token configured for authorized live channel/chat updates" if present(env, "TELEGRAM_BOT_TOKEN") else "optional; zero-key monitored-channel mode already works for the SIH demo",
     )
     status(
         "X public URL oEmbed",
@@ -128,7 +128,7 @@ def main() -> int:
     status(
         "Mastodon",
         present(env, "MASTODON_BASE_URL"),
-        f"instance configured: {env.get('MASTODON_BASE_URL', '')}" if present(env, "MASTODON_BASE_URL") else "set MASTODON_BASE_URL",
+        f"instance configured: {env.get('MASTODON_BASE_URL', '')}" if present(env, "MASTODON_BASE_URL") else "default instance is mastodon.social",
     )
 
     print("\nWHAT TO SEND FOR DEBUGGING")
