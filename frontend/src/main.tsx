@@ -18,6 +18,7 @@ import './analysis-pro.css';
 import './source-pro.css';
 import './view-fixes.css';
 import './analysis-hotfix.css';
+import './conversation-intelligence.css';
 
 function NexusRuntime() {
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
