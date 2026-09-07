@@ -6,6 +6,7 @@ import AudiencePulsePanel from './AudiencePulsePanel';
 import ConnectionCenter from './ConnectionCenter';
 import FreeConnectorPanel from './FreeConnectorPanel';
 import LiveWatchPanel from './LiveWatchPanel';
+import PS26152AuditPanel from './PS26152AuditPanel';
 import ThemeController from './ThemeController';
 import { API_BASE } from './api';
 import './styles.css';
@@ -24,6 +25,7 @@ import './analysis-hotfix.css';
 import './conversation-intelligence.css';
 import './audience-pulse.css';
 import './live-watch.css';
+import './ps26152-audit.css';
 
 function NexusRuntime() {
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
@@ -95,6 +97,7 @@ function NexusRuntime() {
         <LiveWatchPanel />
         <AudiencePulsePanel />
         <FreeConnectorPanel />
+        <PS26152AuditPanel />
       </AppErrorBoundary>
     </>
   );
