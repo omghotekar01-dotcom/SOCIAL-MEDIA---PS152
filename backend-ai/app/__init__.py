@@ -34,10 +34,10 @@ analytics.timeline = ps26152_timeline
 analytics.build_network = ps26152_network
 analytics.narrative_summaries = complete_narrative_summaries
 
-from .complete_demo import complete_seed_demo_events
+from .ps26152_demo import ps26152_seed_demo_events
 from .complete_overview import complete_overview
 
-analytics.seed_demo_events = complete_seed_demo_events
+analytics.seed_demo_events = ps26152_seed_demo_events
 analytics.overview = complete_overview
 
 # Import reaction-aware alerts only after narrative/trend/network functions above
