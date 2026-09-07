@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
-import { Boxes, CircleDot, GitBranch, Network, ShieldCheck, Users2 } from 'lucide-react';
-import type { GraphNode, NetworkResponse } from './api';
+import { useEffect, useMemo, useState } from 'react';
+import { Boxes, CircleDot, GitBranch, Network, RefreshCw, ShieldCheck, Users2 } from 'lucide-react';
+import { api, type GraphNode, type NetworkResponse } from './api';
 
 type Props = { network: NetworkResponse | null };
 type RoleFilter = 'all' | 'high' | 'bridge';
@@ -53,11 +53,30 @@ function centrality(node: GraphNode) {
   return Math.max(node.pagerank || 0, node.betweenness || 0, node.degree_centrality || 0);
 }
 
-export default function NetworkPro({ network }: Props) {
-  const allNodes = network?.nodes || [];
-  const [selectedId, setSelectedId] = useState<string | null>(allNodes[0]?.id || null);
+export default function NetworkPro({ network: initialNetwork }: Props) {
+  const [workspaceNetwork, setWorkspaceNetwork] = useState<NetworkResponse | null>(initialNetwork);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(initialNetwork?.nodes?.[0]?.id || null);
   const [filter, setFilter] = useState<RoleFilter>('all');
   const [showLabels, setShowLabels] = useState(true);
+
+  const refreshGlobal = async () => {
+    setRefreshing(true);
+    try {
+      const result = await api.network();
+      setWorkspaceNetwork(result);
+      setSelectedId((current) => result.nodes.some((node) => node.id === current) ? current : result.nodes[0]?.id || null);
+    } catch {
+      // Keep the last valid graph visible; the surrounding app already reports backend failures.
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => { void refreshGlobal(); }, []);
+
+  const network = workspaceNetwork || initialNetwork;
+  const allNodes = network?.nodes || [];
 
   const filteredNodes = useMemo(() => {
     if (filter === 'high') return allNodes.filter((node) => node.role === 'High Reach Node');
@@ -78,6 +97,7 @@ export default function NetworkPro({ network }: Props) {
         <div className="analysis-empty-icon"><Network size={27} /></div>
         <h2>No interaction network yet</h2>
         <p>NEXUS needs observed authors plus mentions, replies, shared domains, or narrative co-amplification before it can draw relationships. Fresh Search or Demo will populate this when the evidence contains those signals.</p>
+        <button className="evidence-export-btn" onClick={() => void refreshGlobal()} disabled={refreshing}><RefreshCw size={14} /> {refreshing ? 'Refreshing…' : 'Refresh graph'}</button>
         <div className="analysis-empty-note"><ShieldCheck size={15} /> An empty graph is shown honestly instead of inventing relationships.</div>
       </section>
     );
@@ -86,7 +106,7 @@ export default function NetworkPro({ network }: Props) {
   return (
     <div className="network-pro">
       <div className="analysis-summary-grid network-summary-grid">
-        <div className="analysis-summary-card"><Users2 size={17} /><span>Observed nodes</span><strong>{network.summary.nodes || 0}</strong><small>anonymized / public author nodes</small></div>
+        <div className="analysis-summary-card"><Users2 size={17} /><span>Observed nodes</span><strong>{network.summary.nodes || 0}</strong><small>whole current workspace</small></div>
         <div className="analysis-summary-card"><GitBranch size={17} /><span>Observed edges</span><strong>{network.summary.edges || 0}</strong><small>reply, mention, shared-domain or co-amplification</small></div>
         <div className="analysis-summary-card"><Boxes size={17} /><span>Communities</span><strong>{network.summary.communities || 0}</strong><small>graph-structure groups</small></div>
         <div className="analysis-summary-card"><CircleDot size={17} /><span>Bridge / reach</span><strong>{(network.summary.bridge_nodes || 0) + (network.summary.high_reach_nodes || 0)}</strong><small>structural roles only</small></div>
@@ -94,7 +114,7 @@ export default function NetworkPro({ network }: Props) {
 
       <section className="panel panel-large network-workbench">
         <div className="analysis-section-head network-head">
-          <div><span className="eyebrow">Observed relationship graph</span><h2>Community & influence map</h2><p>Nodes are grouped by detected community. Size reflects observed graph centrality; color identifies platform.</p></div>
+          <div><span className="eyebrow">Whole-workspace relationship graph</span><h2>Community & influence map</h2><p>Nodes are grouped by detected community. Size reflects observed graph centrality; color identifies platform.</p></div>
           <div className="network-controls">
             <div className="network-filter-group">
               <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All {allNodes.length}</button>
@@ -102,6 +122,7 @@ export default function NetworkPro({ network }: Props) {
               <button className={filter === 'bridge' ? 'active' : ''} onClick={() => setFilter('bridge')}>Bridge {network.summary.bridge_nodes || 0}</button>
             </div>
             <button className={`network-label-toggle ${showLabels ? 'active' : ''}`} onClick={() => setShowLabels((value) => !value)}>{showLabels ? 'Labels on' : 'Labels off'}</button>
+            <button className="network-label-toggle" disabled={refreshing} onClick={() => void refreshGlobal()}><RefreshCw size={12} /> {refreshing ? 'Refreshing' : 'Refresh'}</button>
           </div>
         </div>
 
