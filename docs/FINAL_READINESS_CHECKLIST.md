@@ -1,89 +1,124 @@
 # NEXUS — Final SIH Readiness Checklist
 
-Use this checklist on the demo laptop. The project is ready for the slot when every **BLOCKER** item passes.
+Use this checklist on the **actual demo laptop and venue network**. NEXUS is ready for the slot only when every **BLOCKER** item passes.
 
-## BLOCKER — repository/runtime
+## BLOCKER — repository / runtime
 
-- [ ] `python scripts\preflight.py` exits with `PRE-FLIGHT PASSED`.
+- [ ] `git switch build/ps152-complete` is the active branch unless the final build has intentionally been merged elsewhere.
+- [ ] `git pull origin build/ps152-complete` completes before final validation.
+- [ ] `.\.venv\Scripts\python.exe .\scripts\preflight.py` exits with `PRE-FLIGHT PASSED`.
+- [ ] Backend pytest suite passes inside preflight.
+- [ ] Frontend `typecheck` passes inside preflight.
+- [ ] Frontend production build passes inside preflight.
 - [ ] `scripts\start_demo.bat` starts FastAPI and React without manual code edits.
-- [ ] `http://127.0.0.1:8000/health` returns `version: 0.3.0`.
+- [ ] `http://127.0.0.1:8000/health` returns `version: 0.4.0`.
 - [ ] `http://127.0.0.1:5173` loads the analyst console.
-- [ ] **Seed Demo** produces deterministic events and multiple narratives.
-- [ ] Overview, Timeline, Trends, Network, Demographics, Alerts and Evidence pages load.
-- [ ] No `.env` secret file is committed; only `.env.example` is in Git.
-- [ ] Git working tree used for the demo corresponds to the final merged commit.
+- [ ] No `.env` secret file is committed; only `.env.example` is tracked.
+
+## BLOCKER — modern UI / presentation
+
+- [ ] App opens in **Light** mode by default on a clean browser profile.
+- [ ] Light ↔ Dark theme switch works without unreadable labels/cards.
+- [ ] Browser reload preserves the selected theme.
+- [ ] No topbar/sidebar/card overlap at the laptop's presentation resolution.
+- [ ] Browser zoom is 90–100%; no horizontal page scrollbar appears at normal desktop width.
+- [ ] **Live Intelligence Pulse** renders on Overview.
+- [ ] Pulse shows LIVE evidence, platform coverage, connector readiness and latest evidence time.
+- [ ] A one-platform workspace visibly shows the coverage-limited warning.
+- [ ] `Ctrl+K` / `Cmd+K` focuses the global search box.
+- [ ] **Connections** opens as a drawer and supports High Priority / Ready / Needs Setup filters.
+- [ ] **Free Sources** opens as a drawer and does not cause page overlap.
+- [ ] Escape closes each utility drawer.
+- [ ] Source actions refresh the workspace in-place rather than visibly reloading the browser.
+- [ ] If a frontend render failure is intentionally simulated during development, the controlled NEXUS recovery screen appears instead of a blank page.
+
+## BLOCKER — Telegram / primary live demo
+
+- [ ] `NexusSIHDemo` is public and reachable from the demo laptop without a Telegram login requirement for the public preview.
+- [ ] The channel contains at least one recent post matching the chosen demo query.
+- [ ] `.env` contains `TELEGRAM_PUBLIC_CHANNELS=NexusSIHDemo` or relies on the built-in/demo fallback intentionally.
+- [ ] Searching that keyword with **Fresh Search** returns at least one Telegram result on venue internet.
+- [ ] **Posts / Explorer** → Telegram filter shows the expected channel post.
+- [ ] The selected Telegram post is labelled `LIVE` and retains timestamp/provenance.
+- [ ] Optional Bot API token, if used, remains only in local `.env` and is never shown or committed.
+
+## BLOCKER — Posts / Explorer
+
+- [ ] Platform chips show the sources currently present in the workspace.
+- [ ] LIVE / REPLAY / IMPORT filters work.
+- [ ] Local post search filters text/authors/hashtags without a backend request.
+- [ ] Newest / Oldest sorting works.
+- [ ] Selected post opens without layout overflow for long text.
+- [ ] YouTube evidence renders an embedded player when the source exposes a video.
+- [ ] Explicit public X Post evidence renders the official oEmbed card when available.
+- [ ] Provenance shows connector, search query/session, source event ID and internal evidence ID.
+- [ ] Open-original link appears only for a usable public source URL.
 
 ## BLOCKER — PS26152 requirement coverage
 
-- [ ] Sentiment vector visible with event-level and timeline output.
-- [ ] Audience/demographic vector visible as aggregate privacy-safe slices.
-- [ ] Trend/narrative vector visible with explainable trend decomposition.
-- [ ] Link/network vector visible with nodes, edges, PageRank/betweenness/community roles.
-- [ ] Every evidence record shows its acquisition mode: `LIVE`, `REPLAY`, or `IMPORT`.
-- [ ] Narrative detail uses `earliest observed` language, never absolute origin claims.
+- [ ] Sentiment vector is visible at event level and on Timeline.
+- [ ] Audience/demographic vector is visible as aggregate privacy-conscious slices.
+- [ ] Trend/narrative vector shows explainable trend decomposition.
+- [ ] Link/network vector shows nodes, edges, centrality/community roles.
+- [ ] Every evidence record retains acquisition mode: `LIVE`, `REPLAY`, or `IMPORT`.
+- [ ] Narrative detail says **earliest observed** rather than claiming absolute internet origin.
+- [ ] Network roles are described as graph topology, never intent/guilt.
 
-## BLOCKER — live source resilience
+## BLOCKER — source truth / resilience
 
-- [ ] At least one zero-key live source has been tested on venue internet before the slot.
-- [ ] Recommended: Telegram public channel ingestion works with a known public channel.
-- [ ] Recommended: Bluesky search works for the chosen demo query.
-- [ ] YouTube zero-key path has been tested or intentionally skipped in the live stage demo.
-- [ ] X connector status is truthful when no bearer token/public bridge is configured.
-- [ ] Instagram connector status is truthful when Meta/public-profile access is unavailable.
-- [ ] A failed external connector does not break seeded analytics.
+- [ ] At least one real live/public source is tested on venue internet before the slot.
+- [ ] Telegram is the preferred primary proof.
+- [ ] YouTube zero-key path is tested or deliberately omitted from the live on-stage step.
+- [ ] Bluesky is treated as useful bonus zero-key coverage, not a dependency.
+- [ ] X status remains truthful when official developer access/credits are absent.
+- [ ] Free X mode is described only as explicit public Post URL oEmbed / configured permitted bridge — not unrestricted keyword search.
+- [ ] Instagram status is truthful when Meta authorization/public-profile access is unavailable.
+- [ ] Failure of one external connector does not erase evidence returned by successful connectors.
+- [ ] Deterministic Demo / IMPORT remains available as offline fallback.
 
-## BLOCKER — evidence/trust
+## BLOCKER — evidence / trust
 
-- [ ] `GET /api/certificates` returns certificate summaries after demo seed.
-- [ ] A narrative certificate returns `CERTIFIED` or explicit `ABSTAIN`.
-- [ ] Evidence certificate includes snapshot hash, algorithm hash and witness posts.
-- [ ] Graph labels are explained as topology, not accusation/identity attribution.
-- [ ] Demographic UI does not expose inferred protected traits for named individuals.
+- [ ] Evidence ledger rows open the exact selected post.
+- [ ] `GET /api/certificates` returns certificate summaries when evidence supports them.
+- [ ] A narrative certificate returns `CERTIFIED` or explicit `ABSTAIN` rather than fabricating confidence.
+- [ ] Evidence certificate includes witness/evidence references and deterministic integrity metadata where implemented.
+- [ ] Demographics UI does not expose guessed protected traits for named individuals.
 
-## SHOULD PASS — tests
+## BLOCKER — clean submission ZIP
 
-From `backend-ai`:
-
-```bat
-..\.venv\Scripts\python -m pytest -q
-```
-
-From `frontend`:
+Run:
 
 ```bat
-npm run build
+scripts\export_submission.bat
 ```
 
-Optional Spring gateway:
+- [ ] Exporter refuses to run if tracked project files have uncommitted changes.
+- [ ] ZIP filename contains the Git commit SHA.
+- [ ] ZIP contains `START_HERE.md`, frontend, backend, scripts, docs and `.env.example`.
+- [ ] ZIP does **not** contain `.env`, `.venv`, `node_modules`, local DB files or credentials.
+- [ ] Extract the final ZIP into a temporary folder once and inspect its structure before submission.
+
+## SHOULD PASS — stage preparation
+
+- [ ] Close unrelated browser tabs, notifications and messaging popups.
+- [ ] Keep FastAPI docs in a second tab only for technical questions.
+- [ ] Keep `docs/JURY_DEMO_5_MIN.md` on a teammate's phone/laptop, not projected.
+- [ ] Keep **Connections** and **Free Sources** drawers closed when beginning the presentation.
+- [ ] Use a controlled demo query whose expected Telegram evidence you already verified.
+- [ ] Do not test every source live on stage.
+- [ ] Keep mobile hotspot as backup for venue Wi-Fi.
+- [ ] Keep a deterministic imported/replay dataset ready.
+- [ ] Record a short screen capture of the working live demo as disaster-recovery proof if time permits.
+
+## Optional gateway
+
+The Spring gateway is not required for the normal verified demo. Only if the team intentionally uses it:
 
 ```bat
 cd backend-java
 mvn -B test package
 ```
 
-- [ ] Python tests pass.
-- [ ] Python `compileall` passes.
-- [ ] React/TypeScript production build passes.
-- [ ] Spring gateway package passes if the team plans to use it during the presentation.
-
-## SHOULD PASS — demo preparation
-
-- [ ] Browser zoom 90–100%, no devtools visible.
-- [ ] Close unrelated tabs/notifications.
-- [ ] Keep FastAPI docs in a second tab for certificate/API questions.
-- [ ] Keep `docs/JURY_DEMO_5_MIN.md` open on a teammate's phone, not on the projector.
-- [ ] Use a controlled fictional/demo narrative for deterministic presentation.
-- [ ] Do not test all connectors live on stage; one or two is enough to prove the architecture.
-- [ ] Keep hotspot/mobile data as backup for venue Wi-Fi.
-
-## OPTIONAL polish
-
-- [ ] Add project logo/favicon.
-- [ ] Add a dedicated Evidence Certificate UI card if presentation time permits.
-- [ ] Add official API credentials only if already provisioned; do not spend the last hours fighting access approval.
-- [ ] Prepare one exported JSON dataset as a backup import file.
-- [ ] Record a 30–60 second screen capture of the working live demo as disaster recovery evidence.
-
 ## Final rule
 
-If an external service fails during judging, **do not debug the vendor**. Show the connector state, state that the source is unavailable/rate-limited, seed or use existing evidence, and continue through the four analytics vectors. A resilient system that tells the truth is a stronger engineering demonstration than a brittle scraper that pretends it always works.
+If an external platform fails during judging, **do not debug the vendor on stage**. Show the truthful connector state, acknowledge the bounded coverage, continue with successful LIVE evidence or the deterministic Demo workspace, and prove the four analytics vectors plus evidence traceability. A resilient system that reports its limitations is a stronger engineering demonstration than a brittle integration that pretends every platform is always available.
