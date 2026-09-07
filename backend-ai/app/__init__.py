@@ -10,6 +10,7 @@ from . import free_connectors as free_connectors
 from .advanced_analytics import advanced_demographics, advanced_infer_text, advanced_trend_metrics
 from .advanced_collector import AdvancedCollectorManager, AdvancedCollectorStartRequest
 from .complete_alerts import complete_alerts
+from .complete_demo import complete_seed_demo_events
 from .complete_overview import complete_overview
 from .conversation_connectors import bluesky_search_with_replies, mastodon_search_with_replies, reddit_search_with_comments
 from .priority_free_connectors import telegram_monitored_search
@@ -23,11 +24,13 @@ from .youtube_official import youtube_official_search
 x_oembed_or_bridge = x_resilient_oembed_or_bridge
 
 # SIH26152 analysis contract: eight emotion dimensions, explicit stance/sarcasm,
-# aggregate privacy-conscious demographics, and near-term trend momentum.
+# aggregate privacy-conscious demographics, near-term trend momentum, and a
+# deterministic reaction-rich jury dataset that is always labelled REPLAY.
 analytics.infer_text = advanced_infer_text
 analytics.demographics = advanced_demographics
 analytics.trend_metrics = advanced_trend_metrics
 analytics.overview = complete_overview
+analytics.seed_demo_events = complete_seed_demo_events
 
 # Stable chart/graph behavior plus reaction-aware explainable attention alerts.
 analytics.alerts = complete_alerts
