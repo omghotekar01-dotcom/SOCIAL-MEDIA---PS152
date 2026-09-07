@@ -14,9 +14,12 @@ def complete_overview(store) -> dict[str, Any]:
     roots = [event for event in events if not is_reaction(event)]
     reactions = [event for event in events if is_reaction(event)]
 
+    overall_sentiment = Counter((event.sentiment_label or "unknown") for event in events)
     root_sentiment = Counter((event.sentiment_label or "unknown") for event in roots)
     reaction_sentiment = Counter((event.sentiment_label or "unknown") for event in reactions)
     reaction_stance = Counter((event.stance_label or "unclear") for event in reactions)
+    platforms = Counter(event.platform for event in events)
+    source_modes = Counter(event.source_mode for event in events)
 
     emotion_totals: Counter[str] = Counter()
     for event in events:
@@ -31,6 +34,10 @@ def complete_overview(store) -> dict[str, Any]:
     return {
         **base,
         "total_events": len(events),
+        "platform_mix": dict(platforms),
+        "source_modes": dict(source_modes),
+        "sentiment_mix": dict(overall_sentiment),
+        "latest_event_at": max((event.created_at for event in events), default=None),
         "root_content_events": len(roots),
         "reaction_events": len(reactions),
         "root_sentiment_mix": dict(root_sentiment),
