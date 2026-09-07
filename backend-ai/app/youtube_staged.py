@@ -42,12 +42,29 @@ def _root_exists(video_id: str) -> bool:
     )
 
 
-def _ingest_background(events: list[SocialEventIn], *, video_id: str, query: str) -> None:
-    """Insert the exhaustive result only if its foreground root is still active.
+def _update_root_profile(video_id: str, values: dict[str, Any]) -> None:
+    store = get_store()
+    root = next(
+        (
+            event
+            for event in store.list_events(limit=None, platform="youtube")
+            if event.source_event_id == f"video:{video_id}"
+        ),
+        None,
+    )
+    if not root:
+        return
+    profile = dict(root.public_profile or {})
+    profile.update(values)
+    with store.connect() as conn:
+        conn.execute(
+            "UPDATE events SET public_profile = ? WHERE platform = 'youtube' AND source_event_id = ?",
+            (json.dumps(profile, ensure_ascii=False), f"video:{video_id}"),
+        )
 
-    This prevents a slow crawl for an old URL from contaminating a workspace that
-    the analyst has already reset for another search.
-    """
+
+def _ingest_background(events: list[SocialEventIn], *, video_id: str, query: str) -> None:
+    """Insert the exhaustive result only if its foreground root is still active."""
     if not events or not _root_exists(video_id):
         return
 
@@ -67,9 +84,6 @@ def _ingest_background(events: list[SocialEventIn], *, video_id: str, query: str
         if store.insert(normalized, derived) is not None:
             inserted += 1
 
-    # The exhaustive root duplicates the fast root and is therefore not inserted.
-    # Update its public metadata in-place so the UI reports the final coverage,
-    # captured count, page count and stop reason rather than the first 50 sample.
     full_root = events[0]
     full_profile: dict[str, Any] = dict(full_root.public_profile or {})
     full_profile.update(
@@ -77,6 +91,8 @@ def _ingest_background(events: list[SocialEventIn], *, video_id: str, query: str
             "connector": "youtube_data_api_v3_exhaustive_background",
             "search_query": query,
             "collection_mode": "background_exhaustive",
+            "background_collection_state": "complete",
+            "background_inserted_events": inserted,
         }
     )
     with store.connect() as conn:
@@ -95,6 +111,23 @@ async def _background_exhaustive(query: str, video_id: str) -> None:
             YouTubeSearchRequest(query=query, max_videos=1, max_comments_per_video=0)
         )
         await asyncio.to_thread(_ingest_background, events, video_id=video_id, query=query)
+    except asyncio.CancelledError:
+        _update_root_profile(
+            video_id,
+            {
+                "background_collection_state": "cancelled",
+                "background_collection_note": "Background crawl was cancelled.",
+            },
+        )
+        raise
+    except Exception as exc:
+        _update_root_profile(
+            video_id,
+            {
+                "background_collection_state": "error",
+                "background_collection_note": str(exc)[:300],
+            },
+        )
     finally:
         _BACKGROUND_TASKS.pop(video_id, None)
 
@@ -113,13 +146,11 @@ def _start_background(query: str, video_id: str) -> None:
 async def youtube_staged_search(request: YouTubeSearchRequest) -> list[SocialEventIn]:
     """Fast-first exact-video collection with exhaustive background completion.
 
-    Exact YouTube URLs/video IDs no longer keep the browser waiting for the whole
-    public conversation. NEXUS returns a first analytical sample quickly, then
-    continues provider-bounded exhaustive collection in a server-side task.
-
-    Keyword searches preserve the normal connector behavior because they may
-    select several videos and are better controlled through the ordinary source
-    workflow / Live Watch.
+    Exact YouTube URLs/video IDs return a first analytical sample quickly and
+    continue provider-bounded exhaustive collection in a server-side task. The
+    root event exposes ``background_collection_state`` so the frontend can refresh
+    only when the crawl completes, without running heavy overview analytics on a
+    polling loop.
     """
     video_id = _video_id(request.query)
     if not video_id or request.max_comments_per_video > 0:
