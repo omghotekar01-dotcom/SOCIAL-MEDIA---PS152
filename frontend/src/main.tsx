@@ -5,6 +5,7 @@ import AppErrorBoundary from './AppErrorBoundary';
 import AudiencePulsePanel from './AudiencePulsePanel';
 import ConnectionCenter from './ConnectionCenter';
 import FreeConnectorPanel from './FreeConnectorPanel';
+import LiveWatchPanel from './LiveWatchPanel';
 import ThemeController from './ThemeController';
 import './styles.css';
 import './post-explorer.css';
@@ -21,6 +22,7 @@ import './view-fixes.css';
 import './analysis-hotfix.css';
 import './conversation-intelligence.css';
 import './audience-pulse.css';
+import './live-watch.css';
 
 function NexusRuntime() {
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
@@ -37,6 +39,7 @@ function NexusRuntime() {
       <AppErrorBoundary>
         <AppPro key={workspaceVersion} />
         <ConnectionCenter />
+        <LiveWatchPanel />
         <AudiencePulsePanel />
         <FreeConnectorPanel />
       </AppErrorBoundary>
