@@ -9,10 +9,10 @@ from . import connectors as connectors
 from . import free_connectors as free_connectors
 from .advanced_analytics import advanced_demographics, advanced_infer_text, advanced_overview, advanced_trend_metrics
 from .advanced_collector import AdvancedCollectorManager, AdvancedCollectorStartRequest
+from .complete_alerts import complete_alerts
 from .conversation_connectors import bluesky_search_with_replies, mastodon_search_with_replies, reddit_search_with_comments
 from .priority_free_connectors import telegram_monitored_search
 from .resilient_connectors import instagram_resilient_profile, mastodon_resilient_search, reddit_resilient_search
-from .stable_alerts import stable_alerts
 from .stable_views import stable_network, stable_timeline
 from .x_embed_resilience import x_resilient_oembed_or_bridge
 from .youtube_official import youtube_official_search
@@ -28,9 +28,8 @@ analytics.demographics = advanced_demographics
 analytics.trend_metrics = advanced_trend_metrics
 analytics.overview = advanced_overview
 
-# Replay-stable alert identifiers and chart/graph implementations that remain
-# useful even for tiny live workspaces.
-analytics.alerts = stable_alerts
+# Stable chart/graph behavior plus reaction-aware explainable attention alerts.
+analytics.alerts = complete_alerts
 analytics.timeline = stable_timeline
 analytics.build_network = stable_network
 
