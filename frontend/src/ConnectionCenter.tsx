@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, CircleAlert, PlugZap, RefreshCw, ShieldCheck, X } from 'lucide-react';
+import { CheckCircle2, CircleAlert, Filter, PlugZap, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { api, type ConnectorStatus } from './api';
 
 type SourceMeta = {
@@ -12,6 +12,7 @@ type SourceMeta = {
   demoPriority: 'HIGH' | 'MEDIUM' | 'LOW';
   note: string;
 };
+type ConnectionFilter = 'all' | 'priority' | 'ready' | 'setup';
 
 const SOURCES: SourceMeta[] = [
   {
@@ -74,6 +75,7 @@ export default function ConnectionCenter() {
   const [loading, setLoading] = useState(false);
   const [statuses, setStatuses] = useState<ConnectorStatus[]>([]);
   const [error, setError] = useState('');
+  const [filter, setFilter] = useState<ConnectionFilter>('all');
 
   const refresh = async () => {
     setLoading(true);
@@ -89,12 +91,27 @@ export default function ConnectionCenter() {
   };
 
   useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
 
   const byPlatform = useMemo(() => new Map(statuses.map((item) => [item.platform, item])), [statuses]);
-  const liveReady = SOURCES.filter((source) => {
-    const state = byPlatform.get(source.platform)?.state;
+  const isReady = (platform: string) => {
+    const state = byPlatform.get(platform)?.state;
     return state === 'READY' || state === 'LIVE';
-  }).length;
+  };
+  const liveReady = SOURCES.filter((source) => isReady(source.platform)).length;
+  const setupCount = SOURCES.length - liveReady;
+  const visibleSources = useMemo(() => SOURCES.filter((source) => {
+    const ready = isReady(source.platform);
+    if (filter === 'priority') return source.demoPriority === 'HIGH';
+    if (filter === 'ready') return ready;
+    if (filter === 'setup') return !ready;
+    return true;
+  }), [filter, byPlatform]);
 
   return (
     <>
@@ -105,7 +122,7 @@ export default function ConnectionCenter() {
 
       {open && <button className="utility-backdrop" aria-label="Close connection center" onClick={() => setOpen(false)} />}
 
-      <aside className={`connection-drawer ${open ? 'open' : ''}`} aria-hidden={!open}>
+      <aside className={`connection-drawer ${open ? 'open' : ''}`} aria-hidden={!open} aria-label="Connection Center">
         <div className="utility-drawer-head">
           <div>
             <div className="drawer-kicker">SOURCE CONTROL</div>
@@ -121,8 +138,16 @@ export default function ConnectionCenter() {
         <div className="drawer-trust-note"><ShieldCheck size={16} /><span>Secrets stay in your local <code>.env</code>. Status badges describe the richer/official path; each card separately shows the available free fallback.</span></div>
         {error && <div className="drawer-error">{error}</div>}
 
+        <div className="connection-filter-bar" role="group" aria-label="Filter source connections">
+          <span><Filter size={13} /> View</span>
+          <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All <b>{SOURCES.length}</b></button>
+          <button className={filter === 'priority' ? 'active' : ''} onClick={() => setFilter('priority')}>High priority <b>{SOURCES.filter((source) => source.demoPriority === 'HIGH').length}</b></button>
+          <button className={filter === 'ready' ? 'active' : ''} onClick={() => setFilter('ready')}>Ready <b>{liveReady}</b></button>
+          <button className={filter === 'setup' ? 'active' : ''} onClick={() => setFilter('setup')}>Needs setup <b>{setupCount}</b></button>
+        </div>
+
         <div className="connection-grid">
-          {SOURCES.map((source) => {
+          {visibleSources.map((source) => {
             const status = byPlatform.get(source.platform);
             const state = status?.state || 'NOT_REPORTED';
             const ready = state === 'READY' || state === 'LIVE';
@@ -144,6 +169,7 @@ export default function ConnectionCenter() {
               </article>
             );
           })}
+          {!visibleSources.length && <div className="connection-empty">No sources match this readiness filter.</div>}
         </div>
       </aside>
     </>
