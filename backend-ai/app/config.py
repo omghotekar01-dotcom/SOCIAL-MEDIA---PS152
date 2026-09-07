@@ -33,7 +33,6 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str = ""
     telegram_allowed_chat_ids: str = ""
-    # Primary zero-key SIH demo source. A local .env value can override or extend this.
     telegram_public_channels: str = "NexusSIHDemo"
     telegram_poll_timeout_seconds: int = 5
     telegram_mtproto_enabled: bool = False
@@ -53,10 +52,11 @@ class Settings(BaseSettings):
 
     reddit_client_id: str = ""
     reddit_client_secret: str = ""
-    reddit_user_agent: str = "NEXUS-SIH26152/0.4"
+    reddit_user_agent: str = "NEXUS-SIH26152/0.5"
     reddit_enabled: bool = True
 
     mastodon_base_url: str = "https://mastodon.social"
+    mastodon_fallback_base_urls: str = "https://mastodon.online,https://fosstodon.org"
 
     nexus_enable_transformers: bool = False
     nexus_sentiment_model: str = "cardiffnlp/twitter-roberta-base-sentiment-latest"
@@ -89,6 +89,15 @@ class Settings(BaseSettings):
             if clean and clean not in values:
                 values.append(clean)
         return values[:12]
+
+    @property
+    def mastodon_fallback_base_url_list(self) -> list[str]:
+        values: list[str] = []
+        for raw in self.mastodon_fallback_base_urls.replace(";", ",").split(","):
+            clean = raw.strip().rstrip("/")
+            if clean and clean not in values:
+                values.append(clean)
+        return values[:4]
 
     @property
     def sqlite_path(self) -> Path:
