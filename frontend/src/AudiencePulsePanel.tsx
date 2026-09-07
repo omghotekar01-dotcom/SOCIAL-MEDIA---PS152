@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, BarChart3, LoaderCircle, MessageCircleMore, ShieldCheck, Users2, X } from 'lucide-react';
+import { Activity, AlertTriangle, BarChart3, LoaderCircle, MessageCircleMore, ShieldCheck, TrendingUp, Users2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { API_BASE } from './api';
 
@@ -33,6 +33,21 @@ type ReactionOverview = {
   top_conversations?: ReactionConversation[];
 };
 
+type TrendNarrative = {
+  id: string;
+  title: string;
+  event_count: number;
+  trend: {
+    score: number;
+    status: string;
+    velocity?: number;
+    momentum?: string;
+    predicted_next_bucket_volume?: number;
+    forecast_confidence?: number;
+    forecast_scope?: string;
+  };
+};
+
 type OverviewPayload = {
   total_events?: number;
   root_content_events?: number;
@@ -44,6 +59,7 @@ type OverviewPayload = {
   sentiment_separation_note?: string;
   emotion_mix?: Record<string, number>;
   reaction_overview?: ReactionOverview;
+  narratives?: TrendNarrative[];
 };
 
 const pct = (value?: number) => `${Math.round((value || 0) * 100)}%`;
@@ -56,9 +72,18 @@ function distributionShare(counts: Record<string, number> | undefined, key: stri
 }
 
 async function loadOverview(): Promise<OverviewPayload> {
-  const response = await fetch(`${API_BASE}/api/overview`);
-  if (!response.ok) throw new Error(`Audience overview failed: HTTP ${response.status}`);
-  return response.json();
+  const [overviewResponse, narrativesResponse] = await Promise.all([
+    fetch(`${API_BASE}/api/overview`),
+    fetch(`${API_BASE}/api/narratives`),
+  ]);
+  if (!overviewResponse.ok) throw new Error(`Audience overview failed: HTTP ${overviewResponse.status}`);
+  const overview = await overviewResponse.json();
+  let narratives: TrendNarrative[] = [];
+  if (narrativesResponse.ok) {
+    const payload = await narrativesResponse.json();
+    narratives = Array.isArray(payload?.narratives) ? payload.narratives : [];
+  }
+  return { ...overview, narratives };
 }
 
 export default function AudiencePulsePanel() {
@@ -102,6 +127,7 @@ export default function AudiencePulsePanel() {
     const mix = data?.emotion_mix || {};
     return emotionLabels.map((label) => [label, Number(mix[label] || 0)] as const);
   }, [data]);
+  const trendRadar = useMemo(() => [...(data?.narratives || [])].sort((a, b) => Number(b.trend?.score || 0) - Number(a.trend?.score || 0)).slice(0, 5), [data]);
 
   const rootPositive = distributionShare(data?.root_sentiment_mix, 'positive');
   const rootNegative = distributionShare(data?.root_sentiment_mix, 'negative');
@@ -155,6 +181,19 @@ export default function AudiencePulsePanel() {
             {emotions.map(([label, value]) => (
               <div key={label}><span>{label}</span><i><b style={{ width: pct(Math.min(1, value)) }} /></i><strong>{pct(value)}</strong></div>
             ))}
+          </div>
+        </section>
+
+        <section className="audience-pulse-section">
+          <div className="audience-pulse-section-title"><div><span>PREDICTIVE TREND RADAR</span><strong>Momentum in the observed timeline</strong></div><small>Near-term estimate, not an internet-wide forecast</small></div>
+          <div className="audience-trend-list">
+            {trendRadar.map((item) => (
+              <article key={item.id}>
+                <div><TrendingUp size={13} /><div><strong>{item.title}</strong><span>{item.trend.status} · score {Number(item.trend.score || 0).toFixed(2)}</span></div></div>
+                <div className="audience-trend-metrics"><span>Momentum <b>{item.trend.momentum || '—'}</b></span><span>Velocity <b>{Number(item.trend.velocity || 0).toFixed(2)}</b></span><span>Next 15m <b>{item.trend.predicted_next_bucket_volume ?? '—'}</b></span><span>Forecast conf. <b>{pct(item.trend.forecast_confidence)}</b></span></div>
+              </article>
+            ))}
+            {!trendRadar.length && <div className="audience-empty"><TrendingUp size={15} /><span>No narrative momentum is available yet. Run a search or load the deterministic demo.</span></div>}
           </div>
         </section>
 
