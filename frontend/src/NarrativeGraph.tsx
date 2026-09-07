@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Activity, GitBranch, Layers3, ShieldCheck } from 'lucide-react';
 import {
   Bar,
@@ -26,6 +26,52 @@ type Bucket = {
   negative: number;
   neutral: number;
 };
+
+type ChartTheme = {
+  accent: string;
+  positive: string;
+  negative: string;
+  neutral: string;
+  grid: string;
+  text: string;
+  surface: string;
+};
+
+const LIGHT: ChartTheme = {
+  accent: '#4f7cff',
+  positive: '#16a879',
+  negative: '#e05263',
+  neutral: '#8b97a9',
+  grid: '#dce3ee',
+  text: '#64748b',
+  surface: '#ffffff',
+};
+
+const DARK: ChartTheme = {
+  accent: '#7aa2ff',
+  positive: '#57d7ad',
+  negative: '#ff8998',
+  neutral: '#95a3b8',
+  grid: '#2b3547',
+  text: '#9aa8bb',
+  surface: '#171e29',
+};
+
+function useChartTheme(): ChartTheme {
+  const read = () => document.documentElement.dataset.theme === 'dark' ? DARK : LIGHT;
+  const [theme, setTheme] = useState<ChartTheme>(read);
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => setTheme(read()));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  return theme;
+}
 
 function chooseBucketMs(timestamps: number[]): number {
   if (timestamps.length < 2) return 15 * 60 * 1000;
@@ -87,6 +133,7 @@ function buildBuckets(detail: NarrativeDetail): Bucket[] {
 }
 
 export default function NarrativeGraph({ detail }: Props) {
+  const theme = useChartTheme();
   const data = useMemo(() => buildBuckets(detail), [detail]);
   const sparse = data.length <= 4;
   const total = detail.lineage.length;
@@ -110,7 +157,7 @@ export default function NarrativeGraph({ detail }: Props) {
         <div>
           <span className="eyebrow">Narrative propagation graph</span>
           <h3>How this narrative accumulated across the observed timeline</h3>
-          <p>Bars show new evidence in each time bucket. The cumulative line shows observed narrative growth; sentiment lines show how positive, negative and neutral evidence accumulated.</p>
+          <p>Bars show new evidence in each time bucket. The cumulative line shows observed narrative growth; sentiment lines show positive, negative and neutral evidence movement.</p>
         </div>
         <div className="narrative-graph-kpis">
           <span><Activity size={13} /><b>{total}</b> evidence</span>
@@ -121,18 +168,18 @@ export default function NarrativeGraph({ detail }: Props) {
       <div className="narrative-graph-shell">
         <ResponsiveContainer width="100%" height={360} minWidth={280}>
           <ComposedChart data={data} margin={{ top: 18, right: 20, bottom: 12, left: 0 }}>
-            <CartesianGrid stroke="var(--border)" strokeDasharray="4 6" vertical={false} />
-            <XAxis dataKey="time" tick={{ fill: 'var(--text-soft)', fontSize: 10 }} tickLine={false} axisLine={{ stroke: 'var(--border)' }} minTickGap={24} />
-            <YAxis allowDecimals={false} tick={{ fill: 'var(--text-soft)', fontSize: 10 }} tickLine={false} axisLine={false} width={38} />
+            <CartesianGrid stroke={theme.grid} strokeDasharray="4 6" vertical={false} />
+            <XAxis dataKey="time" tick={{ fill: theme.text, fontSize: 10 }} tickLine={false} axisLine={{ stroke: theme.grid }} minTickGap={24} />
+            <YAxis allowDecimals={false} tick={{ fill: theme.text, fontSize: 10 }} tickLine={false} axisLine={false} width={38} />
             <Tooltip
-              contentStyle={{ background: 'var(--surface-solid)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 12 }}
-              labelStyle={{ color: 'var(--text)', fontWeight: 800 }}
+              contentStyle={{ background: theme.surface, color: theme.text, border: `1px solid ${theme.grid}`, borderRadius: 12 }}
+              labelStyle={{ color: theme.text, fontWeight: 800 }}
             />
-            <Bar dataKey="newEvidence" name="New evidence" fill="var(--accent)" opacity={0.35} radius={[6, 6, 2, 2]} minPointSize={5} maxBarSize={38} />
-            <Line type="monotone" dataKey="cumulative" name="Cumulative evidence" stroke="var(--accent)" strokeWidth={3} dot={sparse ? { r: 4, fill: 'var(--accent)', strokeWidth: 0 } : false} activeDot={{ r: 5 }} />
-            <Line type="monotone" dataKey="positive" name="Positive evidence" stroke="#16a879" strokeWidth={2} dot={sparse ? { r: 3, fill: '#16a879', strokeWidth: 0 } : false} />
-            <Line type="monotone" dataKey="negative" name="Negative evidence" stroke="#e05263" strokeWidth={2} dot={sparse ? { r: 3, fill: '#e05263', strokeWidth: 0 } : false} />
-            <Line type="monotone" dataKey="neutral" name="Neutral evidence" stroke="#8b97a9" strokeWidth={1.8} strokeDasharray="5 5" dot={sparse ? { r: 3, fill: '#8b97a9', strokeWidth: 0 } : false} />
+            <Bar isAnimationActive={false} dataKey="newEvidence" name="New evidence" fill={theme.accent} opacity={0.35} radius={[6, 6, 2, 2]} minPointSize={5} maxBarSize={38} />
+            <Line isAnimationActive={false} type="monotone" dataKey="cumulative" name="Cumulative evidence" stroke={theme.accent} strokeWidth={3} dot={sparse ? { r: 4, fill: theme.accent, strokeWidth: 0 } : false} activeDot={{ r: 5 }} />
+            <Line isAnimationActive={false} type="monotone" dataKey="positive" name="Positive evidence" stroke={theme.positive} strokeWidth={2} dot={sparse ? { r: 3, fill: theme.positive, strokeWidth: 0 } : false} activeDot={{ r: 4 }} />
+            <Line isAnimationActive={false} type="monotone" dataKey="negative" name="Negative evidence" stroke={theme.negative} strokeWidth={2} dot={sparse ? { r: 3, fill: theme.negative, strokeWidth: 0 } : false} activeDot={{ r: 4 }} />
+            <Line isAnimationActive={false} type="monotone" dataKey="neutral" name="Neutral evidence" stroke={theme.neutral} strokeWidth={1.8} strokeDasharray="5 5" dot={sparse ? { r: 3, fill: theme.neutral, strokeWidth: 0 } : false} activeDot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
