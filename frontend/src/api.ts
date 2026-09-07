@@ -285,10 +285,8 @@ async function smartWorkspaceSearch(query: string, options?: SearchOptions): Pro
   const reset = options?.reset ?? true;
   const limit = options?.limitPerSource ?? 15;
 
-  // Exact YouTube URLs/video IDs are conversation targets, not cross-platform
-  // keywords. Route directly to the official Data API so Fresh Search collects
-  // the root video + public comments + nested replies instead of creating a
-  // zero-key `free:<video_id>` metadata-only record.
+  // Exact YouTube targets are full conversations. 0 requests provider-exhaustive
+  // pagination: every public comment/reply page until YouTube returns no token.
   if (isExactYouTubeTarget(clean)) {
     if (reset) {
       await request<{ status: string; total_events: number }>('/api/workspace/reset', {
@@ -297,7 +295,7 @@ async function smartWorkspaceSearch(query: string, options?: SearchOptions): Pro
       });
     }
 
-    const youtube = await officialYouTubeSearch(clean, 1, 100);
+    const youtube = await officialYouTubeSearch(clean, 1, 0);
     const received = Number(youtube.received ?? youtube.inserted ?? 0);
     return {
       received,
@@ -307,28 +305,24 @@ async function smartWorkspaceSearch(query: string, options?: SearchOptions): Pro
       query: clean,
       search_session_id: `youtube-direct-${Date.now()}`,
       reset,
-      message: 'Exact YouTube conversation loaded through YouTube Data API v3 with public comments/replies where available.',
+      message: 'Exact YouTube conversation loaded exhaustively through YouTube Data API v3, including public comments/replies until provider exhaustion.',
       sources: {
         youtube: {
           state: 'OK',
           received,
-          connector: 'youtube_data_api_v3',
+          connector: 'youtube_data_api_v3_exhaustive',
         },
       },
     };
   }
 
-  // For normal topic search, use the official YouTube connector whenever the
-  // backend reports that the API key is ready. Other public sources remain
-  // independent so a YouTube failure never destroys the rest of the workspace.
   let youtubeOfficialReady = false;
   try {
     const status = await request<{ connectors: ConnectorStatus[] }>('/api/connectors/status');
     const youtube = status.connectors.find((item) => item.platform === 'youtube');
     youtubeOfficialReady = !!youtube && (youtube.state === 'READY' || youtube.state === 'LIVE');
   } catch {
-    // If status discovery itself fails, preserve the existing backend workspace
-    // path rather than blocking all source collection.
+    // Preserve public-source search if connector status discovery fails.
   }
 
   const base = await request<WorkspaceSearchResponse>('/api/search/workspace', {
@@ -349,7 +343,7 @@ async function smartWorkspaceSearch(query: string, options?: SearchOptions): Pro
   if (!youtubeOfficialReady) return base;
 
   try {
-    const youtube = await officialYouTubeSearch(clean, 3, 100);
+    const youtube = await officialYouTubeSearch(clean, 3, 0);
     const received = Number(youtube.received ?? youtube.inserted ?? 0);
     return {
       ...base,
@@ -357,13 +351,13 @@ async function smartWorkspaceSearch(query: string, options?: SearchOptions): Pro
       inserted: base.inserted + Number(youtube.inserted || 0),
       duplicates: base.duplicates + Number(youtube.duplicates || 0),
       total_events: Number(youtube.total_events || base.total_events),
-      message: `${base.message} Official YouTube video/comment/reply evidence appended.`,
+      message: `${base.message} Exhaustive official YouTube comment/reply evidence appended.`,
       sources: {
         ...base.sources,
         youtube: {
           state: 'OK',
           received,
-          connector: 'youtube_data_api_v3',
+          connector: 'youtube_data_api_v3_exhaustive',
         },
       },
     };
@@ -375,7 +369,7 @@ async function smartWorkspaceSearch(query: string, options?: SearchOptions): Pro
         youtube: {
           state: 'ERROR',
           received: 0,
-          connector: 'youtube_data_api_v3',
+          connector: 'youtube_data_api_v3_exhaustive',
           detail: error instanceof Error ? error.message : 'Official YouTube collection failed.',
         },
       },
@@ -394,7 +388,7 @@ export const api = {
   network: (id?: string) => request<NetworkResponse>(`/api/network${id ? `?narrative_id=${encodeURIComponent(id)}` : ''}`),
   demographics: () => request<DemographicsResponse>('/api/demographics'),
   alerts: () => request<{ alerts: AlertItem[] }>('/api/alerts'),
-  events: () => request<{ events: SocialEvent[] }>('/api/events?limit=500&newest_first=true'),
+  events: () => request<{ events: SocialEvent[] }>('/api/events?limit=2000&newest_first=true'),
   event: (id: string) => request<SocialEvent>(`/api/events/${encodeURIComponent(id)}`),
   resetWorkspace: () => request<{ status: string; total_events: number }>('/api/workspace/reset', {
     method: 'POST', body: '{}',
@@ -409,7 +403,7 @@ export const api = {
   searchX: (query: string) => request<{ inserted: number; total_events: number }>('/api/connectors/x/search', {
     method: 'POST', body: JSON.stringify({ query, max_results: 20 }),
   }),
-  searchYouTube: (query: string) => officialYouTubeSearch(query, isExactYouTubeTarget(query) ? 1 : 3, 100),
+  searchYouTube: (query: string) => officialYouTubeSearch(query, isExactYouTubeTarget(query) ? 1 : 3, 0),
   syncMeta: (source: 'instagram' | 'facebook') => request<{ inserted: number; total_events: number }>(
     '/api/connectors/meta/sync', { method: 'POST', body: JSON.stringify({ source, limit: 25 }) },
   ),
