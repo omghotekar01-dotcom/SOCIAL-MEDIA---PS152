@@ -113,7 +113,8 @@ class WorkspaceSearchRequest(BaseModel):
     TELEGRAM_PUBLIC_CHANNELS in `.env` is automatically used when the request
     does not provide an explicit channel target. The active query is attached to
     the internal channel specification so the monitored-channel connector can
-    filter public Telegram posts before ingestion.
+    filter public Telegram posts before ingestion. For the SIH demo, the final
+    safety fallback is the user's public `NexusSIHDemo` channel.
     """
 
     query: str = Field(min_length=1, max_length=300)
@@ -129,12 +130,10 @@ class WorkspaceSearchRequest(BaseModel):
     @model_validator(mode="after")
     def attach_monitored_telegram_query(self):
         settings = get_settings()
-        raw = (self.telegram_channel or settings.telegram_public_channels or "").strip()
-        if raw:
-            raw = raw.split("||", 1)[0].strip()
-            self.telegram_channel = f"{raw}||{self.query}"
-        else:
-            self.telegram_channel = None
+        raw = (self.telegram_channel or settings.telegram_public_channels or "NexusSIHDemo").strip()
+        raw = raw or "NexusSIHDemo"
+        raw = raw.split("||", 1)[0].strip()
+        self.telegram_channel = f"{raw}||{self.query}"
         return self
 
 
