@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0.."
 
 echo ============================================================
-echo  NEXUS - SIH26152 DEMO STARTER v0.3.3
+echo  NEXUS - SIH26152 DEMO STARTER v0.4.0
 echo ============================================================
 
 where python >nul 2>&1
@@ -80,7 +80,14 @@ if not exist "frontend\node_modules" (
 echo [4/7] Running source, backend-test and frontend-build preflight...
 "%PY%" scripts\preflight.py
 if errorlevel 1 (
-  echo [ERROR] Preflight found a blocking project issue. NEXUS will not launch an unverified demo build.
+  echo [ERROR] Base preflight found a blocking project issue. NEXUS will not launch an unverified demo build.
+  goto :fail
+)
+
+echo [4/7] Running SIH26152 requirement-completeness preflight...
+"%PY%" scripts\preflight_ps152_complete.py
+if errorlevel 1 (
+  echo [ERROR] SIH26152 capability preflight found a blocking project issue.
   goto :fail
 )
 
@@ -105,14 +112,16 @@ start "" http://127.0.0.1:5173
 
 echo.
 echo ============================================================
-echo  NEXUS demo is ready.
+echo  NEXUS SIH26152 demo is ready.
 echo  UI:           http://127.0.0.1:5173
 echo  API docs:     http://127.0.0.1:8000/docs
 echo  Health:       http://127.0.0.1:8000/health
 echo  Evidence API: http://127.0.0.1:8000/api/certificates
 echo.
+echo  Core analysis: 8-emotion NLP + stance + sarcasm + demographics
+echo                 + trends + link analysis + public reactions.
 echo  Seed data is fictional and explicitly labelled REPLAY.
-echo  FREE SOURCE LAB can add real LIVE public evidence.
+echo  SOCIAL SOURCE LAB can add real LIVE/public and disclosed IMPORT evidence.
 echo ============================================================
 exit /b 0
 
