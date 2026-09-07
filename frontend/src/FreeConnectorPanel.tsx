@@ -106,10 +106,21 @@ export default function FreeConnectorPanel() {
 
   const runAllAvailable = async () => {
     if (!query.trim()) return;
-    setBusy('allAvailable'); setMessage('Trying every available connector path…'); setMessageGood(false);
+    setBusy('allAvailable'); setMessage('Trying every free, public and configured authorized connector…'); setMessageGood(false);
     const ok: string[] = [];
     const setup: string[] = [];
     let inserted = 0;
+
+    const trySource = async (label: string, fn: () => Promise<any>) => {
+      try {
+        const result = await fn();
+        inserted += Number(result?.inserted || 0);
+        ok.push(label);
+      } catch {
+        setup.push(label);
+      }
+    };
+
     try {
       try {
         const base = await post('/api/search/workspace', workspaceBody(false));
@@ -119,14 +130,18 @@ export default function FreeConnectorPanel() {
         }
       } catch { setup.push('free-mix'); }
 
-      const rawTarget = target.trim();
-      if (X_POST_RE.test(rawTarget)) {
-        try { const result = await post('/api/connectors/x/public', { query: query.trim(), target: rawTarget, limit: 25 }); inserted += Number(result?.inserted || 0); ok.push('x-oembed'); } catch { setup.push('x-oembed'); }
+      // Explicit public X URLs use the official unauthenticated oEmbed path.
+      if (X_POST_RE.test(target.trim())) {
+        await trySource('x-oembed', () => post('/api/connectors/x/public', { query: query.trim(), target: target.trim(), limit: 25 }));
       }
 
-      for (const source of ['instagram', 'facebook'] as const) {
-        try { const result = await post('/api/connectors/meta/sync', { source, limit: 25 }); inserted += Number(result?.inserted || 0); ok.push(`${source}-meta`); } catch { setup.push(`${source}-meta`); }
-      }
+      // These calls are safe to attempt: the backend returns a clear credentials
+      // or permission state when the corresponding provider access is not set up.
+      await trySource('telegram-bot', () => post('/api/connectors/telegram/poll', { max_updates: 50 }));
+      await trySource('youtube-official', () => post('/api/connectors/youtube/search', { query: query.trim(), max_videos: 3, max_comments_per_video: 20 }));
+      await trySource('x-official', () => post('/api/connectors/x/search', { query: query.trim(), max_results: 20 }));
+      await trySource('instagram-meta', () => post('/api/connectors/meta/sync', { source: 'instagram', limit: 25 }));
+      await trySource('facebook-meta', () => post('/api/connectors/meta/sync', { source: 'facebook', limit: 25 }));
 
       setMessageGood(ok.length > 0);
       setMessage(`ALL AVAILABLE: ${inserted} new · working ${[...new Set(ok)].join(', ') || 'none'}${setup.length ? ` · needs setup/restricted ${[...new Set(setup)].join(', ')}` : ''}`);
@@ -152,7 +167,7 @@ export default function FreeConnectorPanel() {
   const cleanHashtag = query.trim().replace(/^#/, '');
   const targetLooksX = X_POST_RE.test(target.trim());
   const targetUsername = target.trim().replace(/^@/, '');
-  const busyLabel = busy ? busy === 'mix' ? 'Building fresh workspace…' : busy === 'allAvailable' ? 'Trying available sources…' : `Running ${busy}…` : '';
+  const busyLabel = busy ? busy === 'mix' ? 'Building fresh workspace…' : busy === 'allAvailable' ? 'Trying every available source path…' : `Running ${busy}…` : '';
 
   return (
     <>
