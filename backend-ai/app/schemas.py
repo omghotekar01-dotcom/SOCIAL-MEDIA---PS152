@@ -201,7 +201,9 @@ class MastodonSearchRequest(BaseModel):
 class YouTubeSearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=200)
     max_videos: int = Field(default=3, ge=1, le=10)
-    max_comments_per_video: int = Field(default=20, ge=1, le=100)
+    # 0 = exhaustive/provider-bounded mode. Positive values are optional analyst
+    # caps for quota-controlled environments.
+    max_comments_per_video: int = Field(default=0, ge=0, le=50000)
 
 
 class MetaSyncRequest(BaseModel):
