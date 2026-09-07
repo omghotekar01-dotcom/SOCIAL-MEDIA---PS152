@@ -8,6 +8,7 @@ import './styles.css';
 import './post-explorer.css';
 import './premium-ui.css';
 import './post-toolbar.css';
+import './command-center.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
