@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { BadgeCheck, Radio, ShieldCheck, Wifi, X as CloseIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BadgeCheck, LoaderCircle, Radio, ShieldCheck, Wifi, X as CloseIcon } from 'lucide-react';
 import { API_BASE } from './api';
 
 type ActionName = 'telegram' | 'youtube' | 'bluesky' | 'reddit' | 'mastodon' | 'instagram' | 'instagramTag' | 'x' | 'mix' | 'verify';
@@ -31,12 +31,19 @@ export default function FreeConnectorPanel() {
   const [messageGood, setMessageGood] = useState(false);
   const [open, setOpen] = useState(false);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
   const run = async (name: ActionName, fn: () => Promise<any>, reload = true) => {
     setBusy(name); setMessage(''); setMessageGood(false);
     try {
       const result = await fn();
       setMessageGood(true);
-      setMessage(`${name.toUpperCase()}: ${result?.inserted ?? 0} new / ${result?.received ?? 0} received${reload ? ' · refreshing…' : ''}`);
+      setMessage(`${name.toUpperCase()}: ${result?.inserted ?? 0} new / ${result?.received ?? 0} received${reload ? ' · refreshing workspace…' : ''}`);
       if (reload) window.setTimeout(() => window.location.reload(), 650);
     } catch (error) {
       setMessageGood(false);
@@ -74,7 +81,7 @@ export default function FreeConnectorPanel() {
       }
 
       setMessageGood(ok.length > 0);
-      setMessage(`FRESH MIX: ${totalInserted} posts · OK ${ok.join(', ') || 'none'}${unavailable.length ? ` · unavailable ${[...new Set(unavailable)].join(', ')}` : ''} · old topic cleared`);
+      setMessage(`FRESH MIX: ${totalInserted} posts · OK ${ok.join(', ') || 'none'}${unavailable.length ? ` · unavailable ${[...new Set(unavailable)].join(', ')}` : ''} · old topic cleared · refreshing workspace…`);
       window.setTimeout(() => window.location.reload(), 850);
     } catch (error) {
       setMessageGood(false);
@@ -99,6 +106,7 @@ export default function FreeConnectorPanel() {
 
   const cleanHashtag = query.trim().replace(/^#/, '');
   const targetLooksX = X_POST_RE.test(target.trim());
+  const busyLabel = busy ? busy === 'mix' ? 'Building fresh workspace…' : `Running ${busy}…` : '';
 
   return (
     <>
@@ -109,7 +117,7 @@ export default function FreeConnectorPanel() {
 
       {open && <button className="utility-backdrop free-source-backdrop" aria-label="Close free source lab" onClick={() => setOpen(false)} />}
 
-      <aside className={`free-source-drawer ${open ? 'open' : ''}`} aria-hidden={!open}>
+      <aside className={`free-source-drawer ${open ? 'open' : ''}`} aria-hidden={!open} aria-label="Free Source Lab">
         <div className="utility-drawer-head free-source-head">
           <div>
             <div className="drawer-kicker">COLLECTION LAB</div>
@@ -121,9 +129,11 @@ export default function FreeConnectorPanel() {
 
         <div className="free-source-form">
           <label><span>Search topic</span><input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void runMix(); }} placeholder="topic / #hashtag / search query" /></label>
-          <label><span>Optional target</span><input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="Telegram / Instagram target or public X Post URL(s)" /></label>
-          <button className="free-primary" disabled={!!busy || !query.trim()} onClick={() => void runMix()}><Wifi size={14} /> Fresh Free Mix</button>
+          <label><span>Optional target</span><input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="Telegram / Instagram target or public X Post URL(s)" /><small>{targetLooksX ? 'X public Post URL detected — official oEmbed fallback will be used.' : 'Leave blank to use configured Telegram channels and zero-key search sources.'}</small></label>
+          <button className="free-primary" disabled={!!busy || !query.trim()} onClick={() => void runMix()}>{busy === 'mix' ? <LoaderCircle className="spin-icon" size={14} /> : <Wifi size={14} />} {busy === 'mix' ? 'Building…' : 'Fresh Free Mix'}</button>
         </div>
+
+        {busy && <div className="free-source-busy"><LoaderCircle className="spin-icon" size={14} /><span>{busyLabel}</span></div>}
 
         <div className="free-source-actions">
           <button disabled={!!busy || !target.trim() || targetLooksX} onClick={() => run('telegram', () => post('/api/connectors/telegram/public', { channel: `${target.trim().replace(/^@/, '')}||${query.trim()}`, limit: 25 }))}>+ Telegram</button>
