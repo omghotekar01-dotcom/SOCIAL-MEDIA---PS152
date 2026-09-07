@@ -26,6 +26,7 @@ import './audience-pulse.css';
 import './ps26152-audit.css';
 import './ps26152-network.css';
 import './prototype-source-center.css';
+import './chart-visibility.css';
 
 function NexusRuntime() {
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
