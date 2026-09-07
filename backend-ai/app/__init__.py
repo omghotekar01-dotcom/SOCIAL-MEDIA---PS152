@@ -24,14 +24,14 @@ analytics.assign_clusters = scalable_assign_clusters
 from .advanced_analytics import advanced_infer_text, advanced_trend_metrics
 from .ps26152_demographics import ps26152_demographics
 from .ps26152_timeline import ps26152_timeline
-from .stable_views import stable_network
+from .ps26152_network import ps26152_network
 from .complete_narratives import complete_narrative_summaries
 
 analytics.infer_text = advanced_infer_text
 analytics.demographics = ps26152_demographics
 analytics.trend_metrics = advanced_trend_metrics
 analytics.timeline = ps26152_timeline
-analytics.build_network = stable_network
+analytics.build_network = ps26152_network
 analytics.narrative_summaries = complete_narrative_summaries
 
 from .complete_demo import complete_seed_demo_events
