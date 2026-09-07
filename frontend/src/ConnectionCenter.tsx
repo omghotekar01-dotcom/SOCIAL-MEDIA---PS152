@@ -149,7 +149,7 @@ export default function ConnectionCenter() {
         <div className="connection-filter-bar" role="group" aria-label="Filter source connections">
           <span><Filter size={13} /> View</span>
           <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All <b>{SOURCES.length}</b></button>
-          <button className={filter === 'priority' ? 'active' : ''} onClick={() => setFilter('priority')}>Essential <b>{SOURCES.filter((source) => source.requirementTier === 'ESSENTIAL').length}</b></button>
+          <button className={filter === 'priority' ? 'active' : ''} onClick={() => setFilter('priority')} title="High priority requirement sources">Essential <b>{SOURCES.filter((source) => source.requirementTier === 'ESSENTIAL').length}</b></button>
           <button className={filter === 'ready' ? 'active' : ''} onClick={() => setFilter('ready')}>Ready <b>{liveReady}</b></button>
           <button className={filter === 'setup' ? 'active' : ''} onClick={() => setFilter('setup')}>Needs setup <b>{setupCount}</b></button>
         </div>
