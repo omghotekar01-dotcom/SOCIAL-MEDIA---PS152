@@ -10,10 +10,14 @@ from . import free_connectors as free_connectors
 from .priority_free_connectors import telegram_monitored_search, x_oembed_or_bridge
 from .resilient_connectors import instagram_resilient_profile, mastodon_resilient_search, reddit_resilient_search
 from .stable_alerts import stable_alerts
+from .stable_views import stable_network, stable_timeline
 from .youtube_official import youtube_official_search
 
-# Replay-stable alert identifiers.
+# Replay-stable alert identifiers and chart/graph implementations that remain
+# useful even for tiny live workspaces.
 analytics.alerts = stable_alerts
+analytics.timeline = stable_timeline
+analytics.build_network = stable_network
 
 # Video-first official YouTube implementation everywhere, including collector runs.
 connectors.youtube_search = youtube_official_search
