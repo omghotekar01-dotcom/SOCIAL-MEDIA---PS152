@@ -7,6 +7,7 @@ import ThemeController from './ThemeController';
 import './styles.css';
 import './post-explorer.css';
 import './premium-ui.css';
+import './post-toolbar.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
