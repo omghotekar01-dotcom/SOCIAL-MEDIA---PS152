@@ -9,6 +9,7 @@ import './post-explorer.css';
 import './premium-ui.css';
 import './post-toolbar.css';
 import './command-center.css';
+import './responsive-pro.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
