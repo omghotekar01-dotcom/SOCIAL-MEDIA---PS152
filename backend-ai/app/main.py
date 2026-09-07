@@ -13,7 +13,6 @@ from .analytics import (
     assign_clusters,
     build_network,
     demographics,
-    enrich_event,
     narrative_summaries,
     overview,
     seed_demo_events,
@@ -23,6 +22,15 @@ from .collector import COLLECTOR, CollectorStartRequest
 from .config import get_settings
 from .connectors import ConnectorError, connector_statuses, meta_sync, telegram_poll, x_recent_search, youtube_search
 from .db import get_store
+from .intelligence_v2 import (
+    IntelligenceQueryRequest,
+    TextAnalysisRequest,
+    analyze_text,
+    answer_intelligence_query,
+    enrich_event_v2,
+    intelligence_summary,
+    narrative_intelligence,
+)
 from .schemas import (
     DemoSeedRequest,
     HealthResponse,
@@ -41,8 +49,8 @@ STORE = get_store()
 
 app = FastAPI(
     title="NEXUS — Narrative & Influence Intelligence",
-    description="SIH26152 social-media analytics engine with evidence-aware narrative lineage.",
-    version="0.2.0",
+    description="SIH26152 social-media analytics engine: timeline, emotion, stance, demographics, trends and influence topology.",
+    version="0.3.0",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -57,7 +65,7 @@ def ingest(events: list[SocialEventIn]) -> dict[str, Any]:
     inserted: list[SocialEvent] = []
     duplicates = 0
     for incoming in events:
-        normalized, derived = enrich_event(incoming)
+        normalized, derived = enrich_event_v2(incoming)
         row = STORE.insert(normalized, derived)
         if row is None:
             duplicates += 1
@@ -69,8 +77,9 @@ def ingest(events: list[SocialEventIn]) -> dict[str, Any]:
         "received": len(events),
         "inserted": len(inserted),
         "duplicates": duplicates,
-        "event_ids": [e.id for e in inserted],
+        "event_ids": [event.id for event in inserted],
         "total_events": STORE.count(),
+        "inference_engine": "nexus-multidimensional-offline-v2",
     }
 
 
@@ -85,13 +94,14 @@ def root() -> dict[str, str]:
         "name": "NEXUS — Narrative & Influence Intelligence",
         "sih_problem": "SIH26152 — Social Media Analytics",
         "status": "ready",
+        "version": "0.3.0",
         "docs": "/docs",
     }
 
 
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 def health() -> HealthResponse:
-    return HealthResponse(status="ok", service="nexus-ai", version="0.2.0", environment=SETTINGS.nexus_env)
+    return HealthResponse(status="ok", service="nexus-ai", version="0.3.0", environment=SETTINGS.nexus_env)
 
 
 @app.get("/api/connectors/status", tags=["connectors"])
@@ -181,6 +191,55 @@ async def ingest_meta(request: MetaSyncRequest):
     return result
 
 
+@app.post("/api/intelligence/analyze", tags=["intelligence"])
+def api_analyze_text(request: TextAnalysisRequest):
+    return analyze_text(request.text, request.language)
+
+
+@app.get("/api/intelligence/summary", tags=["intelligence"])
+def api_intelligence_summary(
+    platform: str | None = None,
+    narrative_id: str | None = None,
+    limit: int = Query(default=5000, ge=1, le=10000),
+):
+    assign_clusters(STORE)
+    events = STORE.list_events(limit=limit, platform=platform, narrative_id=narrative_id)
+    return intelligence_summary(events)
+
+
+@app.get("/api/intelligence/event/{event_id}", tags=["intelligence"])
+def api_intelligence_event(event_id: str):
+    event = STORE.get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return {
+        "event_id": event.id,
+        "platform": event.platform,
+        "source_mode": event.source_mode,
+        "created_at": event.created_at,
+        "text": event.text,
+        "analysis": analyze_text(event.text, event.language),
+    }
+
+
+@app.get("/api/intelligence/narrative/{narrative_id}", tags=["intelligence"])
+def api_intelligence_narrative(narrative_id: str):
+    assign_clusters(STORE)
+    events = STORE.list_events(limit=5000, narrative_id=narrative_id)
+    if not events:
+        raise HTTPException(status_code=404, detail="Narrative not found")
+    result = narrative_intelligence(events)
+    result["narrative_id"] = narrative_id
+    return result
+
+
+@app.post("/api/intelligence/query", tags=["intelligence"])
+def api_intelligence_query(request: IntelligenceQueryRequest):
+    assign_clusters(STORE)
+    events = STORE.list_events(limit=5000)
+    return answer_intelligence_query(events, request)
+
+
 @app.get("/api/overview", tags=["analytics"])
 def api_overview():
     return overview(STORE)
@@ -203,31 +262,32 @@ def api_narratives():
 
 @app.get("/api/narratives/{narrative_id}", tags=["analytics"])
 def api_narrative_detail(narrative_id: str):
-    narratives = {n["id"]: n for n in narrative_summaries(STORE)}
+    narratives = {narrative["id"]: narrative for narrative in narrative_summaries(STORE)}
     narrative = narratives.get(narrative_id)
     if not narrative:
         raise HTTPException(status_code=404, detail="Narrative not found")
     events = STORE.list_events(limit=5000, narrative_id=narrative_id)
     network = build_network(STORE.list_events(limit=5000), narrative_id)
-    chronological = sorted(events, key=lambda e: e.created_at)
+    chronological = sorted(events, key=lambda event: event.created_at)
     return {
         **narrative,
         "events": chronological,
         "network": network,
+        "intelligence": narrative_intelligence(chronological),
         "lineage": [
             {
-                "event_id": e.id,
-                "platform": e.platform,
-                "source_mode": e.source_mode,
-                "created_at": e.created_at,
-                "author": e.author_display,
-                "author_pseudo_id": e.author_pseudo_id,
-                "text": e.text,
-                "sentiment": e.sentiment_label,
-                "stance": e.stance_label,
-                "source_url": e.url,
+                "event_id": event.id,
+                "platform": event.platform,
+                "source_mode": event.source_mode,
+                "created_at": event.created_at,
+                "author": event.author_display,
+                "author_pseudo_id": event.author_pseudo_id,
+                "text": event.text,
+                "sentiment": event.sentiment_label,
+                "stance": event.stance_label,
+                "source_url": event.url,
             }
-            for e in chronological
+            for event in chronological
         ],
         "origin_claim": "Earliest observed event in the configured/collected dataset; not a claim of absolute internet origin.",
     }
@@ -283,7 +343,7 @@ def export_narrative_json(narrative_id: str):
         "generated_at": datetime.now(timezone.utc),
         "narrative_id": narrative_id,
         "scope_note": "Earliest observed means earliest in collected data. LIVE/REPLAY/IMPORT labels are preserved.",
-        "events": [e.model_dump(mode="json") for e in events],
+        "events": [event.model_dump(mode="json") for event in events],
     }
 
 
@@ -313,8 +373,8 @@ def export_narrative_csv(narrative_id: str):
         ],
     )
     writer.writeheader()
-    for e in events:
-        writer.writerow({field: getattr(e, field) for field in writer.fieldnames})
+    for event in events:
+        writer.writerow({field: getattr(event, field) for field in writer.fieldnames})
     filename = f"nexus-{narrative_id}.csv"
     return Response(
         buffer.getvalue(),
