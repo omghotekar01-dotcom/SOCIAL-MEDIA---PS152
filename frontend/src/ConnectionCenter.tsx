@@ -93,9 +93,14 @@ export default function ConnectionCenter() {
   useEffect(() => { void refresh(); }, []);
   useEffect(() => {
     if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
   }, [open]);
 
   const byPlatform = useMemo(() => new Map(statuses.map((item) => [item.platform, item])), [statuses]);
@@ -122,7 +127,7 @@ export default function ConnectionCenter() {
 
       {open && <button className="utility-backdrop" aria-label="Close connection center" onClick={() => setOpen(false)} />}
 
-      <aside className={`connection-drawer ${open ? 'open' : ''}`} aria-hidden={!open} aria-label="Connection Center">
+      <aside className={`connection-drawer ${open ? 'open' : ''}`} aria-hidden={!open} aria-label="Connection Center" role="dialog" aria-modal={open ? 'true' : undefined}>
         <div className="utility-drawer-head">
           <div>
             <div className="drawer-kicker">SOURCE CONTROL</div>
