@@ -8,6 +8,8 @@
 .pulse-ready-dot,.pulse-live-dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--good);box-shadow:0 0 0 4px color-mix(in srgb,var(--good) 12%,transparent)}
 .pulse-live-dot{animation:nexusPulse 1.8s ease-in-out infinite}
 @keyframes nexusPulse{0%,100%{box-shadow:0 0 0 4px color-mix(in srgb,var(--good) 12%,transparent)}50%{box-shadow:0 0 0 8px color-mix(in srgb,var(--good) 2%,transparent)}}
+@keyframes nexusSpin{to{transform:rotate(360deg)}}
+.spin-icon{animation:nexusSpin .8s linear infinite}
 .pulse-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;position:relative;z-index:1}
 .pulse-card{min-width:0;min-height:92px;padding:13px;display:flex;gap:11px;align-items:flex-start;border:1px solid var(--border);border-radius:15px;background:color-mix(in srgb,var(--surface-solid) 90%,transparent);box-shadow:0 6px 20px color-mix(in srgb,var(--text) 4%,transparent);transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
 .pulse-card:hover{transform:translateY(-1px);border-color:var(--border-strong);box-shadow:var(--shadow-sm)}
@@ -31,6 +33,9 @@
 .connection-filter-bar button.active{background:var(--surface-solid);border-color:var(--border);color:var(--accent);box-shadow:var(--shadow-sm)}
 .connection-filter-bar button b{display:inline-grid;place-items:center;min-width:17px;height:17px;margin-left:3px;padding:0 4px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:8px}
 .connection-empty{grid-column:1/-1;padding:30px;border:1px dashed var(--border-strong);border-radius:14px;text-align:center;color:var(--text-faint);font-size:10px}
+
+.free-source-form label small{display:block;margin-top:6px;color:var(--text-faint);font-size:8px;line-height:1.45}
+.free-source-busy{display:flex;align-items:center;gap:7px;margin-top:10px;padding:9px 10px;border:1px solid var(--accent-border);border-radius:11px;background:var(--accent-soft);color:var(--accent);font-size:9px;font-weight:750}
 
 /* Make dense live data feel deliberate instead of crowded. */
 .content>*{max-width:100%}
