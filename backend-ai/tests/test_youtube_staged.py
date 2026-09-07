@@ -36,6 +36,7 @@ def test_exact_video_returns_fast_sample_and_starts_background(monkeypatch):
         "_start_background",
         lambda query, video_id: started.append((query, video_id)),
     )
+    youtube_staged._BACKGROUND_GENERATIONS.clear()
 
     events = asyncio.run(
         youtube_staged.youtube_staged_search(
@@ -51,6 +52,9 @@ def test_exact_video_returns_fast_sample_and_starts_background(monkeypatch):
     assert started == [("https://youtu.be/abc123def45", "abc123def45")]
     assert events[0].public_profile["background_collection_state"] == "running"
     assert events[0].public_profile["collection_mode"] == "fast_first_background_full"
+    token = str(events[0].public_profile.get("background_collection_token") or "")
+    assert len(token) >= 16
+    assert youtube_staged._BACKGROUND_GENERATIONS["abc123def45"] == token
 
 
 def test_positive_cap_preserves_synchronous_connector_behavior(monkeypatch):
@@ -70,3 +74,43 @@ def test_positive_cap_preserves_synchronous_connector_behavior(monkeypatch):
 
     assert calls == [25]
     assert "background_collection_state" not in events[0].public_profile
+
+
+def test_wait_for_root_prevents_background_race(monkeypatch):
+    checks = iter([False, False, True])
+    sleep_calls: list[float] = []
+
+    def fake_match(video_id: str, generation: str) -> bool:
+        assert video_id == "abc123def45"
+        assert generation == "generation-1"
+        return next(checks, True)
+
+    async def fake_sleep(seconds: float):
+        sleep_calls.append(seconds)
+
+    monkeypatch.setattr(youtube_staged, "_root_matches", fake_match)
+    monkeypatch.setattr(youtube_staged.asyncio, "sleep", fake_sleep)
+
+    ready = asyncio.run(
+        youtube_staged._wait_for_root("abc123def45", "generation-1", timeout_seconds=1.0)
+    )
+
+    assert ready is True
+    assert len(sleep_calls) == 2
+
+
+def test_cancel_background_tasks_clears_generation_state():
+    async def scenario():
+        sleeper = asyncio.create_task(asyncio.sleep(30))
+        youtube_staged._BACKGROUND_TASKS["abc123def45"] = sleeper
+        youtube_staged._BACKGROUND_TASK_GENERATIONS["abc123def45"] = "g1"
+        youtube_staged._BACKGROUND_GENERATIONS["abc123def45"] = "g1"
+        cancelled = youtube_staged.cancel_youtube_background_tasks()
+        await asyncio.sleep(0)
+        assert cancelled == 1
+        assert sleeper.cancelled()
+        assert youtube_staged._BACKGROUND_TASKS == {}
+        assert youtube_staged._BACKGROUND_TASK_GENERATIONS == {}
+        assert youtube_staged._BACKGROUND_GENERATIONS == {}
+
+    asyncio.run(scenario())
