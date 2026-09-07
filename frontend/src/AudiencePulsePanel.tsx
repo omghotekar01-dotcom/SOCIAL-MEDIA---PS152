@@ -35,13 +35,25 @@ type ReactionOverview = {
 
 type OverviewPayload = {
   total_events?: number;
+  root_content_events?: number;
+  reaction_events?: number;
   sentiment_mix?: Record<string, number>;
+  root_sentiment_mix?: Record<string, number>;
+  reaction_sentiment_mix?: Record<string, number>;
+  reaction_stance_mix?: Record<string, number>;
+  sentiment_separation_note?: string;
   emotion_mix?: Record<string, number>;
   reaction_overview?: ReactionOverview;
 };
 
 const pct = (value?: number) => `${Math.round((value || 0) * 100)}%`;
 const emotionLabels = ['anxiety', 'anger', 'excitement', 'sadness', 'joy', 'disgust', 'surprise', 'trust'];
+
+function distributionShare(counts: Record<string, number> | undefined, key: string) {
+  const safe = counts || {};
+  const total = Object.values(safe).reduce((sum, value) => sum + Number(value || 0), 0);
+  return total ? Number(safe[key] || 0) / total : 0;
+}
 
 async function loadOverview(): Promise<OverviewPayload> {
   const response = await fetch(`${API_BASE}/api/overview`);
@@ -91,6 +103,13 @@ export default function AudiencePulsePanel() {
     return emotionLabels.map((label) => [label, Number(mix[label] || 0)] as const);
   }, [data]);
 
+  const rootPositive = distributionShare(data?.root_sentiment_mix, 'positive');
+  const rootNegative = distributionShare(data?.root_sentiment_mix, 'negative');
+  const rootNeutral = distributionShare(data?.root_sentiment_mix, 'neutral');
+  const audiencePositive = distributionShare(data?.reaction_sentiment_mix, 'positive');
+  const audienceNegative = distributionShare(data?.reaction_sentiment_mix, 'negative');
+  const audienceNeutral = distributionShare(data?.reaction_sentiment_mix, 'neutral');
+
   return (
     <>
       <button className="audience-pulse-launcher" type="button" onClick={() => setOpen(true)} title="Open audience intelligence">
@@ -118,9 +137,17 @@ export default function AudiencePulsePanel() {
         <div className="audience-pulse-metrics">
           <div><MessageCircleMore size={15} /><span>Captured reactions</span><strong>{reaction.captured_reactions || 0}</strong><small>comments / replies</small></div>
           <div><Users2 size={15} /><span>Conversations covered</span><strong>{reaction.conversations_with_reactions || 0}/{reaction.conversations || 0}</strong><small>{pct(reaction.coverage)} coverage</small></div>
-          <div><span>NEGATIVE</span><strong>{pct(reaction.overall_negative_share)}</strong><small>positive {pct(reaction.overall_positive_share)}</small></div>
-          <div><span>STANCE</span><strong>{pct(reaction.overall_against_share)} against</strong><small>{pct(reaction.overall_supportive_share)} supportive</small></div>
+          <div><span>AUDIENCE NEGATIVE</span><strong>{pct(reaction.overall_negative_share)}</strong><small>positive {pct(reaction.overall_positive_share)}</small></div>
+          <div><span>AUDIENCE STANCE</span><strong>{pct(reaction.overall_against_share)} against</strong><small>{pct(reaction.overall_supportive_share)} supportive</small></div>
         </div>
+
+        <section className="audience-pulse-section">
+          <div className="audience-pulse-section-title"><div><span>CONTENT VS AUDIENCE</span><strong>Overall sentiment, kept separate</strong></div><small>{data?.sentiment_separation_note || 'Root content is not public opinion.'}</small></div>
+          <div className="audience-sentiment-compare">
+            <div><span>ROOT POSTS / CONTENT</span><strong>{data?.root_content_events || 0} items</strong><p><b>{pct(rootPositive)}</b> positive · <b>{pct(rootNegative)}</b> negative · <b>{pct(rootNeutral)}</b> neutral</p></div>
+            <div><span>COMMENTS / REPLIES</span><strong>{data?.reaction_events || 0} reactions</strong><p><b>{pct(audiencePositive)}</b> positive · <b>{pct(audienceNegative)}</b> negative · <b>{pct(audienceNeutral)}</b> neutral</p></div>
+          </div>
+        </section>
 
         <section className="audience-pulse-section">
           <div className="audience-pulse-section-title"><div><span>8-DIMENSION EMOTION LAYER</span><strong>Observed emotional mix</strong></div><small>{data?.total_events || 0} events</small></div>
