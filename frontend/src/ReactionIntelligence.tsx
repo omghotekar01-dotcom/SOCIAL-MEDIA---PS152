@@ -1,5 +1,6 @@
 import { AlertTriangle, MessageCircle, ShieldCheck, Users2 } from 'lucide-react';
-import type { SocialEvent } from './api';
+import { useEffect, useMemo, useState } from 'react';
+import { API_BASE, type SocialEvent } from './api';
 
 type Props = {
   event: SocialEvent;
@@ -23,6 +24,22 @@ type ReactionSummary = {
   confidence: number;
   verdict: string;
   flags: string[];
+};
+
+type FullReaction = {
+  root_event_id?: string;
+  reaction_count?: number;
+  negative_share?: number;
+  positive_share?: number;
+  against_share?: number;
+  supportive_share?: number;
+  emotion_means?: Record<string, number>;
+  sarcasm_mean?: number;
+  risk_score?: number;
+  risk_label?: 'STABLE' | 'WATCH' | 'ESCALATING';
+  confidence?: number;
+  verdict?: string;
+  flags?: string[];
 };
 
 type ProviderCommentState = {
@@ -54,13 +71,16 @@ function pct(value: number) {
   return `${Math.round(value * 100)}%`;
 }
 
-function providerCommentState(root: SocialEvent, captured: number): ProviderCommentState | null {
+function providerCommentState(root: SocialEvent, visibleCaptured: number): ProviderCommentState | null {
   if (root.platform !== 'youtube') return null;
 
   const profile = root.public_profile || {};
   const state = String(profile.comments_state || '').toLowerCase();
   const note = String(profile.comments_note || '').trim();
   const reported = Number(profile.reported_comment_count || root.engagement?.comments || 0);
+  const captured = Number(profile.captured_comment_count ?? visibleCaptured);
+  const complete = Boolean(profile.collection_complete);
+  const coverage = Number(profile.coverage_ratio);
   const connector = String(profile.connector || '');
   const metadataOnly = root.source_event_id.startsWith('free:') || /yt_dlp|public_metadata/i.test(connector);
 
@@ -72,10 +92,11 @@ function providerCommentState(root: SocialEvent, captured: number): ProviderComm
     };
   }
   if (state === 'available' || captured > 0) {
+    const coverageText = Number.isFinite(coverage) && reported > 0 ? ` · ${Math.round(coverage * 100)}% of reported count` : '';
     return {
-      label: `COMMENTS AVAILABLE · ${captured} CAPTURED`,
-      detail: note || `YouTube Data API returned ${captured} public comment/reply event${captured === 1 ? '' : 's'} for this video.`,
-      tone: 'good',
+      label: `COMMENTS AVAILABLE · ${captured} CAPTURED${complete ? ' · COMPLETE' : ''}`,
+      detail: note || `YouTube Data API returned ${captured} public comment/reply event${captured === 1 ? '' : 's'}${coverageText}.`,
+      tone: complete ? 'good' : 'warn',
     };
   }
   if (state === 'disabled') {
@@ -95,7 +116,7 @@ function providerCommentState(root: SocialEvent, captured: number): ProviderComm
   if (state === 'no_rows_returned') {
     return {
       label: 'COMMENTS REPORTED, BUT NO ROWS RETURNED',
-      detail: `YouTube reports ${reported} comment${reported === 1 ? '' : 's'}, but commentThreads returned no public rows in this request. Try the comments doctor or another public video.`,
+      detail: `YouTube reports ${reported} comment${reported === 1 ? '' : 's'}, but commentThreads returned no public rows in this request.`,
       tone: 'warn',
     };
   }
@@ -126,10 +147,10 @@ function providerCommentState(root: SocialEvent, captured: number): ProviderComm
 function buildSummary(selected: SocialEvent, events: SocialEvent[]): ReactionSummary {
   const root = findRoot(selected, events);
   const conversation = root.conversation_id || selected.conversation_id || '';
-  const reactions = events.filter((event) => {
-    if (event.id === root.id || event.platform !== root.platform) return false;
-    if (event.parent_event_id && event.parent_event_id === root.source_event_id) return true;
-    if (conversation && event.conversation_id === conversation && reactionLike(event)) return true;
+  const reactions = events.filter((candidate) => {
+    if (candidate.id === root.id || candidate.platform !== root.platform) return false;
+    if (candidate.parent_event_id && candidate.parent_event_id === root.source_event_id) return true;
+    if (conversation && candidate.conversation_id === conversation && reactionLike(candidate)) return true;
     return false;
   });
 
@@ -208,9 +229,38 @@ function buildSummary(selected: SocialEvent, events: SocialEvent[]): ReactionSum
 }
 
 export default function ReactionIntelligence({ event, events }: Props) {
-  const summary = buildSummary(event, events);
-  const n = summary.reactions.length;
-  const providerState = providerCommentState(summary.root, n);
+  const local = useMemo(() => buildSummary(event, events), [event, events]);
+  const [full, setFull] = useState<FullReaction | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFull(null);
+    void fetch(`${API_BASE}/api/overview`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        if (cancelled || !payload) return;
+        const rows = payload?.reaction_overview?.top_conversations || [];
+        const match = rows.find((row: FullReaction) => row.root_event_id === local.root.id);
+        if (match) setFull(match);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [local.root.id]);
+
+  const n = Number(full?.reaction_count ?? local.reactions.length);
+  const negativeShare = Number(full?.negative_share ?? local.negativeShare);
+  const positiveShare = Number(full?.positive_share ?? local.positiveShare);
+  const againstShare = Number(full?.against_share ?? local.againstShare);
+  const supportiveShare = Number(full?.supportive_share ?? local.supportiveShare);
+  const anger = Number(full?.emotion_means?.anger ?? local.anger);
+  const anxiety = Number(full?.emotion_means?.anxiety ?? local.anxiety);
+  const sarcasm = Number(full?.sarcasm_mean ?? local.sarcasm);
+  const riskScore = Number(full?.risk_score ?? local.riskScore);
+  const riskLabel = (full?.risk_label ?? local.riskLabel) as ReactionSummary['riskLabel'];
+  const confidence = Number(full?.confidence ?? local.confidence);
+  const verdict = String(full?.verdict ?? local.verdict);
+  const flags = full?.flags ?? local.flags;
+  const providerState = providerCommentState(local.root, n);
 
   return (
     <section className="reaction-card">
@@ -218,11 +268,11 @@ export default function ReactionIntelligence({ event, events }: Props) {
         <div>
           <span className="reaction-kicker">PUBLIC REACTION INTELLIGENCE</span>
           <h3>What people are saying around this post</h3>
-          <p>Post-level NLP is kept separate from comment/reply opinion so NEXUS does not confuse the author's message with public reaction.</p>
+          <p>Post-level NLP is kept separate from comment/reply opinion. Aggregate metrics use the complete backend conversation population when available.</p>
         </div>
-        <div className={`reaction-risk reaction-risk-${summary.riskLabel.toLowerCase()}`}>
-          <span>{summary.riskLabel}</span>
-          <strong>{summary.riskScore}</strong>
+        <div className={`reaction-risk reaction-risk-${riskLabel.toLowerCase()}`}>
+          <span>{riskLabel}</span>
+          <strong>{riskScore}</strong>
           <small>reaction risk / 100</small>
         </div>
       </div>
@@ -235,28 +285,28 @@ export default function ReactionIntelligence({ event, events }: Props) {
       )}
 
       <div className="reaction-verdict">
-        {summary.riskLabel === 'ESCALATING' ? <AlertTriangle size={17} /> : <ShieldCheck size={17} />}
-        <div><strong>{summary.verdict}</strong><span>{n} captured reaction{n === 1 ? '' : 's'} · confidence {pct(summary.confidence)}</span></div>
+        {riskLabel === 'ESCALATING' ? <AlertTriangle size={17} /> : <ShieldCheck size={17} />}
+        <div><strong>{verdict}</strong><span>{n} captured reaction{n === 1 ? '' : 's'} · confidence {pct(confidence)}{full ? ' · full backend aggregate' : ' · visible-row aggregate'}</span></div>
       </div>
 
       <div className="reaction-grid">
         <div className="reaction-metric"><MessageCircle size={15} /><span>Comments / replies</span><strong>{n}</strong><small>linked to this conversation</small></div>
-        <div className="reaction-metric"><Users2 size={15} /><span>Negative / positive</span><strong>{pct(summary.negativeShare)} / {pct(summary.positiveShare)}</strong><small>comment sentiment distribution</small></div>
-        <div className="reaction-metric"><span>STANCE</span><strong>{pct(summary.againstShare)} against</strong><small>{pct(summary.supportiveShare)} supportive</small></div>
-        <div className="reaction-metric"><span>EMOTION</span><strong>{pct(Math.max(summary.anger, summary.anxiety))}</strong><small>max anger/anxiety signal</small></div>
+        <div className="reaction-metric"><Users2 size={15} /><span>Negative / positive</span><strong>{pct(negativeShare)} / {pct(positiveShare)}</strong><small>comment sentiment distribution</small></div>
+        <div className="reaction-metric"><span>STANCE</span><strong>{pct(againstShare)} against</strong><small>{pct(supportiveShare)} supportive</small></div>
+        <div className="reaction-metric"><span>EMOTION</span><strong>{pct(Math.max(anger, anxiety))}</strong><small>max anger/anxiety signal</small></div>
       </div>
 
       {n > 0 ? (
         <>
           <div className="reaction-bars">
-            <div><span>Negative</span><i><b style={{ width: pct(summary.negativeShare) }} /></i><strong>{pct(summary.negativeShare)}</strong></div>
-            <div><span>Positive</span><i><b style={{ width: pct(summary.positiveShare) }} /></i><strong>{pct(summary.positiveShare)}</strong></div>
-            <div><span>Against stance</span><i><b style={{ width: pct(summary.againstShare) }} /></i><strong>{pct(summary.againstShare)}</strong></div>
-            <div><span>Sarcasm</span><i><b style={{ width: pct(summary.sarcasm) }} /></i><strong>{pct(summary.sarcasm)}</strong></div>
+            <div><span>Negative</span><i><b style={{ width: pct(negativeShare) }} /></i><strong>{pct(negativeShare)}</strong></div>
+            <div><span>Positive</span><i><b style={{ width: pct(positiveShare) }} /></i><strong>{pct(positiveShare)}</strong></div>
+            <div><span>Against stance</span><i><b style={{ width: pct(againstShare) }} /></i><strong>{pct(againstShare)}</strong></div>
+            <div><span>Sarcasm</span><i><b style={{ width: pct(sarcasm) }} /></i><strong>{pct(sarcasm)}</strong></div>
           </div>
-          {summary.flags.length > 0 && <div className="reaction-flags">{summary.flags.map((flag) => <span key={flag}>{flag.replaceAll('-', ' ')}</span>)}</div>}
+          {flags.length > 0 && <div className="reaction-flags">{flags.map((flag) => <span key={flag}>{flag.replaceAll('-', ' ')}</span>)}</div>}
           <div className="reaction-samples">
-            {summary.reactions.slice(0, 5).map((reaction) => (
+            {local.reactions.slice(0, 5).map((reaction) => (
               <div key={reaction.id}>
                 <div><strong>{reaction.author_display || reaction.author_pseudo_id || 'Unknown author'}</strong><span>{reaction.sentiment_label || 'unknown'} · {reaction.stance_label || 'unclear'} · {reaction.source_mode}</span></div>
                 <p>{reaction.text}</p>
