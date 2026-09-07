@@ -11,16 +11,24 @@ sys.path.insert(0, str(BACKEND))
 REQUIRED_FILES = [
     "backend-ai/app/advanced_analytics.py",
     "backend-ai/app/reaction_engine.py",
+    "backend-ai/app/complete_overview.py",
     "backend-ai/app/complete_alerts.py",
+    "backend-ai/app/complete_demo.py",
     "backend-ai/app/advanced_collector.py",
     "backend-ai/app/conversation_connectors.py",
     "backend-ai/app/x_embed_resilience.py",
     "backend-ai/tests/test_advanced_analytics.py",
     "backend-ai/tests/test_advanced_collector.py",
+    "backend-ai/tests/test_complete_demo.py",
     "frontend/src/ReactionIntelligence.tsx",
+    "frontend/src/AudiencePulsePanel.tsx",
+    "frontend/src/LiveWatchPanel.tsx",
     "frontend/src/conversation-intelligence.css",
+    "frontend/src/audience-pulse.css",
+    "frontend/src/live-watch.css",
     "frontend/src/FreeConnectorPanel.tsx",
     "frontend/src/PostExplorer.tsx",
+    "frontend/src/main.tsx",
     "docs/SIH26152_COMPLETE_REQUIREMENT_MAP.md",
 ]
 
@@ -37,6 +45,7 @@ TEXT_CONTRACTS = {
         '"trust"',
         "explicit-self-declared-age-only",
         "predicted_next_bucket_volume",
+        "forecast_scope",
     ],
     "backend-ai/app/reaction_engine.py": [
         "workspace_reaction_overview",
@@ -44,10 +53,23 @@ TEXT_CONTRACTS = {
         "ESCALATING",
         "root-post sentiment",
     ],
+    "backend-ai/app/complete_overview.py": [
+        "root_sentiment_mix",
+        "reaction_sentiment_mix",
+        "reaction_stance_mix",
+        "public opinion",
+    ],
     "backend-ai/app/complete_alerts.py": [
         "complete_alerts",
         "AUDIENCE REACTION",
         "wrongdoing or intent",
+    ],
+    "backend-ai/app/complete_demo.py": [
+        "fictional_reaction_demo",
+        "demo-x-riverlink-root",
+        "demo-telegram-riverlink-verified",
+        "demo-reddit-techfest-root",
+        'source_mode="REPLAY"',
     ],
     "backend-ai/app/advanced_collector.py": [
         "enable_telegram_public",
@@ -55,12 +77,26 @@ TEXT_CONTRACTS = {
         "enable_reddit",
         "enable_mastodon",
         "enable_x: bool = False",
+        "connectors.youtube_search",
     ],
     "frontend/src/ReactionIntelligence.tsx": [
         "PUBLIC REACTION INTELLIGENCE",
         "Negative / positive",
         "STANCE",
         "reaction risk / 100",
+    ],
+    "frontend/src/AudiencePulsePanel.tsx": [
+        "Public reaction pulse",
+        "CONTENT VS AUDIENCE",
+        "8-DIMENSION EMOTION LAYER",
+        "overall_against_share",
+    ],
+    "frontend/src/LiveWatchPanel.tsx": [
+        "CONTINUOUS COLLECTION",
+        "Telegram monitored channels",
+        "Bluesky + replies",
+        "Reddit + comments",
+        "X official recent search",
     ],
     "frontend/src/FreeConnectorPanel.tsx": [
         "Manual X Conversation Import",
@@ -72,6 +108,13 @@ TEXT_CONTRACTS = {
         "ReactionIntelligence",
         "content_disclosure",
         "analyst_manual_x_import",
+    ],
+    "frontend/src/main.tsx": [
+        "AudiencePulsePanel",
+        "LiveWatchPanel",
+        "FreeConnectorPanel",
+        "audience-pulse.css",
+        "live-watch.css",
     ],
     "docs/SIH26152_COMPLETE_REQUIREMENT_MAP.md": [
         "Continuous Data Collection",
@@ -117,7 +160,9 @@ def main() -> int:
     for rel in [
         "backend-ai/app/advanced_analytics.py",
         "backend-ai/app/reaction_engine.py",
+        "backend-ai/app/complete_overview.py",
         "backend-ai/app/complete_alerts.py",
+        "backend-ai/app/complete_demo.py",
         "backend-ai/app/advanced_collector.py",
         "backend-ai/app/conversation_connectors.py",
         "backend-ai/app/x_embed_resilience.py",
@@ -134,6 +179,7 @@ def main() -> int:
     try:
         from app.advanced_analytics import advanced_infer_text
         from app.advanced_collector import AdvancedCollectorStartRequest
+        from app.complete_demo import complete_seed_demo_events
 
         inferred = advanced_infer_text("I am shocked, worried and angry but I trust the verified evidence")
         emotions = inferred.get("emotion_scores", {})
@@ -152,6 +198,13 @@ def main() -> int:
             ok("runtime cost guard: official X continuous polling is opt-in")
         else:
             failures += fail("official X continuous polling must remain opt-in")
+
+        demo = complete_seed_demo_events()
+        linked_replies = [event for event in demo if event.event_type == "reply" and event.parent_event_id]
+        if len(linked_replies) >= 30 and all(event.source_mode == "REPLAY" for event in linked_replies):
+            ok("runtime jury demo: linked audience reactions are present and disclosed as REPLAY")
+        else:
+            failures += fail("jury demo does not contain enough linked, disclosed reaction evidence")
     except Exception as exc:
         failures += fail(f"runtime SIH capability import: {exc}")
 
@@ -159,7 +212,7 @@ def main() -> int:
     if failures:
         print(f"SIH26152 COMPLETENESS CHECK FAILED with {failures} issue(s).")
         return 1
-    print("SIH26152 COMPLETENESS CHECK PASSED: collection, sentiment/emotion, demographics, trends, reactions, alerts and link-analysis integration contracts are present.")
+    print("SIH26152 COMPLETENESS CHECK PASSED: continuous collection, sentiment/emotion, demographics, trends, public reactions, explainable alerts and link-analysis contracts are present.")
     return 0
 
 
