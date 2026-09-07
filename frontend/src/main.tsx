@@ -4,8 +4,7 @@ import AppPro from './AppPro';
 import AppErrorBoundary from './AppErrorBoundary';
 import AudiencePulsePanel from './AudiencePulsePanel';
 import ConnectionCenter from './ConnectionCenter';
-import FreeConnectorPanel from './FreeConnectorPanel';
-import LiveWatchPanel from './LiveWatchPanel';
+import PrototypeSourceCenter from './PrototypeSourceCenter';
 import PS26152AuditPanel from './PS26152AuditPanel';
 import ThemeController from './ThemeController';
 import { API_BASE } from './api';
@@ -24,9 +23,9 @@ import './view-fixes.css';
 import './analysis-hotfix.css';
 import './conversation-intelligence.css';
 import './audience-pulse.css';
-import './live-watch.css';
 import './ps26152-audit.css';
 import './ps26152-network.css';
+import './prototype-source-center.css';
 
 function NexusRuntime() {
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
@@ -38,10 +37,10 @@ function NexusRuntime() {
     return () => window.removeEventListener('nexus:workspace-updated', refreshWorkspace);
   }, []);
 
-  // A fast-first YouTube request returns the root + first analytical sample while
-  // the server continues the exhaustive crawl. Poll only one lightweight root
-  // event, not /api/overview, so thousands of comments do not create a second
-  // expensive analytics workload every few seconds.
+  // Exact YouTube URLs return a fast analytical sample while the server continues
+  // the provider-bounded comment/reply crawl. Probe one lightweight root record so
+  // the main dashboard refreshes when the background state/count changes without
+  // repeatedly recalculating heavy analytics during collection.
   useEffect(() => {
     let disposed = false;
     const probe = async () => {
@@ -95,9 +94,8 @@ function NexusRuntime() {
       <AppErrorBoundary>
         <AppPro key={workspaceVersion} />
         <ConnectionCenter />
-        <LiveWatchPanel />
         <AudiencePulsePanel />
-        <FreeConnectorPanel />
+        <PrototypeSourceCenter />
         <PS26152AuditPanel />
       </AppErrorBoundary>
     </>
