@@ -24,6 +24,14 @@
 .coverage-warning span{font-size:9px;line-height:1.4;color:color-mix(in srgb,var(--warn) 74%,var(--text))}
 .coverage-warning .text-btn{flex:none}
 
+.connection-filter-bar{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:12px 0 14px;padding:8px;border:1px solid var(--border);border-radius:13px;background:var(--surface-muted)}
+.connection-filter-bar>span{display:inline-flex;align-items:center;gap:5px;margin-right:2px;color:var(--text-faint);font-size:9px;font-weight:850;text-transform:uppercase;letter-spacing:.08em}
+.connection-filter-bar button{border:1px solid transparent;border-radius:9px;padding:6px 8px;background:transparent;color:var(--text-soft);font-size:9px;font-weight:800;cursor:pointer;transition:background .14s ease,border-color .14s ease,color .14s ease}
+.connection-filter-bar button:hover{background:var(--surface-hover);color:var(--text)}
+.connection-filter-bar button.active{background:var(--surface-solid);border-color:var(--border);color:var(--accent);box-shadow:var(--shadow-sm)}
+.connection-filter-bar button b{display:inline-grid;place-items:center;min-width:17px;height:17px;margin-left:3px;padding:0 4px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:8px}
+.connection-empty{grid-column:1/-1;padding:30px;border:1px dashed var(--border-strong);border-radius:14px;text-align:center;color:var(--text-faint);font-size:10px}
+
 /* Make dense live data feel deliberate instead of crowded. */
 .content>*{max-width:100%}
 .metric-card,.trend-card,.panel,.post-primary-card,.post-info-card,.post-raw-card{contain:layout paint}
@@ -42,4 +50,4 @@ button{-webkit-tap-highlight-color:transparent}
 
 @media(max-width:1450px){.pulse-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:1120px){.workspace-pulse{padding:15px}.workspace-pulse-head{align-items:flex-start;flex-direction:column}.pulse-status{white-space:normal}.query-box kbd{display:none}}
-@media(max-width:780px){.pulse-grid{grid-template-columns:1fr}.coverage-warning{align-items:flex-start;flex-wrap:wrap}.coverage-warning .text-btn{margin-left:27px}.workspace-pulse{border-radius:16px}}
+@media(max-width:780px){.pulse-grid{grid-template-columns:1fr}.coverage-warning{align-items:flex-start;flex-wrap:wrap}.coverage-warning .text-btn{margin-left:27px}.workspace-pulse{border-radius:16px}.connection-filter-bar{align-items:stretch}.connection-filter-bar>span{width:100%}.connection-filter-bar button{flex:1}}
