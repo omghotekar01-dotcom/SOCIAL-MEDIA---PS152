@@ -187,10 +187,130 @@ def test_direct_youtube_url_bypasses_search(monkeypatch):
     monkeypatch.setattr(youtube_official.httpx, 'AsyncClient', RichCommentsClient)
     RichCommentsClient.calls = []
 
-    # Patch the fake details response input id expectations by using its known rich id.
     events = asyncio.run(youtube_official.youtube_official_search(
         YouTubeSearchRequest(query='https://www.youtube.com/watch?v=rich1111111', max_videos=3, max_comments_per_video=5)
     ))
 
     assert events[0].source_event_id == 'video:rich1111111'
     assert not any(url.endswith('/search') for url, _ in RichCommentsClient.calls)
+
+
+class PaginatedCommentsClient:
+    calls: list[tuple[str, dict]] = []
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def get(self, url, params=None, **kwargs):
+        params = dict(params or {})
+        self.__class__.calls.append((url, params))
+        if url.endswith('/videos'):
+            return FakeResponse(200, {
+                'items': [{
+                    'id': 'page1111111',
+                    'status': {'privacyStatus': 'public'},
+                    'statistics': {'commentCount': '4'},
+                    'snippet': {
+                        'title': 'Paged conversation',
+                        'channelTitle': 'Paged Channel',
+                        'publishedAt': '2026-09-06T10:00:00Z',
+                    },
+                }]
+            })
+        if url.endswith('/commentThreads'):
+            if params.get('pageToken') == 'thread-page-2':
+                return FakeResponse(200, {
+                    'items': [{
+                        'id': 'thread-2',
+                        'snippet': {
+                            'totalReplyCount': 0,
+                            'topLevelComment': {
+                                'id': 'top-2',
+                                'snippet': {
+                                    'textDisplay': 'Second page comment',
+                                    'authorDisplayName': 'viewer4',
+                                    'publishedAt': '2026-09-06T12:04:00Z',
+                                },
+                            },
+                        },
+                    }]
+                })
+            return FakeResponse(200, {
+                'items': [{
+                    'id': 'thread-1',
+                    'snippet': {
+                        'totalReplyCount': 2,
+                        'topLevelComment': {
+                            'id': 'top-1',
+                            'snippet': {
+                                'textDisplay': 'First page comment',
+                                'authorDisplayName': 'viewer1',
+                                'publishedAt': '2026-09-06T12:01:00Z',
+                            },
+                        },
+                    },
+                }],
+                'nextPageToken': 'thread-page-2',
+            })
+        if url.endswith('/comments'):
+            if params.get('pageToken') == 'reply-page-2':
+                return FakeResponse(200, {
+                    'items': [{
+                        'id': 'reply-2',
+                        'snippet': {
+                            'textDisplay': 'Second reply page',
+                            'authorDisplayName': 'viewer3',
+                            'publishedAt': '2026-09-06T12:03:00Z',
+                        },
+                    }]
+                })
+            return FakeResponse(200, {
+                'items': [{
+                    'id': 'reply-1',
+                    'snippet': {
+                        'textDisplay': 'First reply page',
+                        'authorDisplayName': 'viewer2',
+                        'publishedAt': '2026-09-06T12:02:00Z',
+                    },
+                }],
+                'nextPageToken': 'reply-page-2',
+            })
+        return FakeResponse(404, {})
+
+
+def test_exhaustive_mode_follows_all_thread_and_reply_page_tokens(monkeypatch):
+    monkeypatch.setattr(youtube_official.SETTINGS, 'youtube_api_key', 'demo-key')
+    monkeypatch.setattr(youtube_official.SETTINGS, 'youtube_max_comments_per_video', 0)
+    monkeypatch.setattr(youtube_official.SETTINGS, 'youtube_max_comment_pages_per_video', 0)
+    monkeypatch.setattr(youtube_official.SETTINGS, 'youtube_max_reply_pages_per_thread', 0)
+    monkeypatch.setattr(youtube_official.httpx, 'AsyncClient', PaginatedCommentsClient)
+    PaginatedCommentsClient.calls = []
+
+    events = asyncio.run(youtube_official.youtube_official_search(
+        YouTubeSearchRequest(
+            query='https://youtu.be/page1111111',
+            max_videos=1,
+            max_comments_per_video=0,
+        )
+    ))
+
+    root = events[0]
+    assert root.source_event_id == 'video:page1111111'
+    assert root.public_profile['comments_state'] == 'available'
+    assert root.public_profile['captured_comment_count'] == 4
+    assert root.public_profile['captured_top_level_comment_count'] == 2
+    assert root.public_profile['captured_reply_count'] == 2
+    assert root.public_profile['comment_thread_pages_fetched'] == 2
+    assert root.public_profile['reply_pages_fetched'] == 2
+    assert root.public_profile['collection_complete'] is True
+    assert root.public_profile['collection_stop_reason'] == 'provider_exhausted'
+    assert root.public_profile['exhaustive_requested'] is True
+
+    assert any(params.get('pageToken') == 'thread-page-2' for url, params in PaginatedCommentsClient.calls if url.endswith('/commentThreads'))
+    assert any(params.get('pageToken') == 'reply-page-2' for url, params in PaginatedCommentsClient.calls if url.endswith('/comments'))
