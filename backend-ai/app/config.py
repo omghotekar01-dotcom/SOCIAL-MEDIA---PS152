@@ -33,6 +33,7 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str = ""
     telegram_allowed_chat_ids: str = ""
+    telegram_public_channels: str = ""
     telegram_poll_timeout_seconds: int = 5
     telegram_mtproto_enabled: bool = False
     telegram_api_id: str = ""
@@ -51,7 +52,7 @@ class Settings(BaseSettings):
 
     reddit_client_id: str = ""
     reddit_client_secret: str = ""
-    reddit_user_agent: str = "NEXUS-SIH26152/0.3"
+    reddit_user_agent: str = "NEXUS-SIH26152/0.4"
     reddit_enabled: bool = True
 
     mastodon_base_url: str = "https://mastodon.social"
@@ -78,6 +79,15 @@ class Settings(BaseSettings):
             except ValueError:
                 continue
         return values
+
+    @property
+    def telegram_public_channel_list(self) -> list[str]:
+        values: list[str] = []
+        for raw in self.telegram_public_channels.replace(";", ",").split(","):
+            clean = raw.strip().lstrip("@").strip("/")
+            if clean and clean not in values:
+                values.append(clean)
+        return values[:12]
 
     @property
     def sqlite_path(self) -> Path:
