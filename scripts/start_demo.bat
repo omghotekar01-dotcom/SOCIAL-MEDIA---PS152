@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0.."
 
 echo ============================================================
-echo  NEXUS - SIH26152 DEMO STARTER v0.4.0
+echo  NEXUS - SIH26152 DEMO STARTER v0.4.1
 echo ============================================================
 
 where python >nul 2>&1
@@ -118,10 +118,11 @@ echo  API docs:     http://127.0.0.1:8000/docs
 echo  Health:       http://127.0.0.1:8000/health
 echo  Evidence API: http://127.0.0.1:8000/api/certificates
 echo.
-echo  Core analysis: 8-emotion NLP + stance + sarcasm + demographics
-echo                 + trends + link analysis + public reactions.
+echo  Core analysis: A-E SIH26152 runtime + 8-emotion NLP + stance
+echo                 + sarcasm + demographics + trends + link spread.
 echo  Seed data is fictional and explicitly labelled REPLAY.
-echo  SOCIAL SOURCE LAB can add real LIVE/public and disclosed IMPORT evidence.
+echo  PROTOTYPE SOURCES: simple Telegram + YouTube + public-source controls.
+echo  PS26152 CORE: judge-facing 5/5 original requirement evidence view.
 echo ============================================================
 exit /b 0
 
