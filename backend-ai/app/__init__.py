@@ -8,6 +8,7 @@ from . import analytics as analytics
 from . import connectors as connectors
 from . import free_connectors as free_connectors
 from .advanced_analytics import advanced_demographics, advanced_infer_text, advanced_overview, advanced_trend_metrics
+from .advanced_collector import AdvancedCollectorManager, AdvancedCollectorStartRequest
 from .conversation_connectors import bluesky_search_with_replies, mastodon_search_with_replies, reddit_search_with_comments
 from .priority_free_connectors import telegram_monitored_search
 from .resilient_connectors import instagram_resilient_profile, mastodon_resilient_search, reddit_resilient_search
@@ -44,3 +45,11 @@ free_connectors.bluesky_search = bluesky_search_with_replies
 free_connectors.reddit_public_search = reddit_search_with_comments
 free_connectors.mastodon_search = mastodon_search_with_replies
 free_connectors.instagram_public_profile = instagram_resilient_profile
+
+# Main imports CollectorStartRequest/COLLECTOR from .collector after package init.
+# Replace those symbols up-front so the API transparently receives the richer
+# continuous multi-source collector without breaking existing frontend contracts.
+from . import collector as collector
+
+collector.CollectorStartRequest = AdvancedCollectorStartRequest
+collector.COLLECTOR = AdvancedCollectorManager()
