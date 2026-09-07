@@ -56,6 +56,21 @@ def _root_matches(video_id: str, generation: str) -> bool:
     return str(profile.get("background_collection_token") or "") == generation
 
 
+async def _wait_for_root(video_id: str, generation: str, timeout_seconds: float = 6.0) -> bool:
+    """Wait for the FastAPI route to persist the fast-first root before crawling.
+
+    The connector starts the background task before its initial result is ingested
+    by the route. Waiting on the generation token removes a race where a very short
+    conversation could finish its background request before the root existed.
+    """
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    while asyncio.get_running_loop().time() < deadline:
+        if _root_matches(video_id, generation):
+            return True
+        await asyncio.sleep(0.05)
+    return False
+
+
 def _update_root_profile(video_id: str, values: dict[str, Any], *, generation: str | None = None) -> None:
     store = get_store()
     root = _root(video_id)
@@ -130,6 +145,8 @@ def _ingest_background(events: list[SocialEventIn], *, video_id: str, query: str
 
 async def _background_exhaustive(query: str, video_id: str, generation: str) -> None:
     try:
+        if not await _wait_for_root(video_id, generation):
+            return
         events = await _exhaustive_youtube_search(
             YouTubeSearchRequest(query=query, max_videos=1, max_comments_per_video=0)
         )
@@ -163,6 +180,19 @@ async def _background_exhaustive(query: str, video_id: str, generation: str) -> 
         if _BACKGROUND_TASK_GENERATIONS.get(video_id) == generation:
             _BACKGROUND_TASKS.pop(video_id, None)
             _BACKGROUND_TASK_GENERATIONS.pop(video_id, None)
+
+
+def cancel_youtube_background_tasks() -> int:
+    """Cancel in-flight exhaustive jobs before a workspace reset/new search."""
+    cancelled = 0
+    for task in list(_BACKGROUND_TASKS.values()):
+        if not task.done():
+            task.cancel()
+            cancelled += 1
+    _BACKGROUND_TASKS.clear()
+    _BACKGROUND_TASK_GENERATIONS.clear()
+    _BACKGROUND_GENERATIONS.clear()
+    return cancelled
 
 
 def _start_background(query: str, video_id: str) -> None:
