@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import AppErrorBoundary from './AppErrorBoundary';
@@ -13,13 +13,29 @@ import './command-center.css';
 import './responsive-pro.css';
 import './resilience.css';
 
+function NexusRuntime() {
+  const [workspaceVersion, setWorkspaceVersion] = useState(0);
+
+  useEffect(() => {
+    const refreshWorkspace = () => setWorkspaceVersion((value) => value + 1);
+    window.addEventListener('nexus:workspace-updated', refreshWorkspace);
+    return () => window.removeEventListener('nexus:workspace-updated', refreshWorkspace);
+  }, []);
+
+  return (
+    <>
+      <ThemeController />
+      <AppErrorBoundary>
+        <App key={workspaceVersion} />
+        <ConnectionCenter />
+        <FreeConnectorPanel />
+      </AppErrorBoundary>
+    </>
+  );
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ThemeController />
-    <AppErrorBoundary>
-      <App />
-      <ConnectionCenter />
-      <FreeConnectorPanel />
-    </AppErrorBoundary>
+    <NexusRuntime />
   </React.StrictMode>,
 );
