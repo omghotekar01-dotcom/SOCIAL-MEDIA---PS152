@@ -1,266 +1,333 @@
-# SIH26152 — Requirement Traceability Matrix
+# SIH26152 — Original Problem Statement Traceability
 
-This is the judge/audit map for **NEXUS — Narrative & Influence Intelligence**. It connects the problem statement's four required analytical vectors to executable code, API endpoints, UI surfaces, evidence, and the demo sequence.
+**Project:** NEXUS — Narrative & Influence Intelligence  
+**Organization:** National Technical Research Organisation (NTRO)  
+**Problem Statement:** SIH26152 — Social Media Analytics
 
-## 1. Sentiment Analysis
-
-**What NEXUS implements**
-
-- Event-level polarity (`positive`, `neutral`, `negative`).
-- Sentiment score and method metadata.
-- Stance (`for`, `against`, `unclear`) where supportable.
-- Lightweight emotion/sarcasm signals as secondary indicators, never treated as ground truth.
-- Temporal sentiment movement across the observed narrative timeline.
-
-**Backend**
-
-- `backend-ai/app/analytics.py`
-  - event enrichment
-  - sentiment/stance/emotion inference
-  - timeline aggregation
-  - alert sentiment-shift explanation
-
-**API**
-
-- `GET /api/timeline`
-- `GET /api/events`
-- `GET /api/narratives/{narrative_id}`
-- `GET /api/alerts`
-
-**UI**
-
-- Timeline tab
-- Narrative lineage cards
-- Evidence ledger
-- Alert explanation cards
-
-**Jury proof**
-
-Open **Timeline**, show positive/neutral/negative movement, then open a narrative/evidence item and show that the aggregate is backed by event-level inference.
+This document maps the implementation directly to the **five core components in the original expected solution**, rather than reducing the requirement to only four analytical vectors.
 
 ---
 
-## 2. Automated / Aggregate Demographic Profiling
+## A. Continuous Data Collection & Timeline Management
 
-**What NEXUS implements**
+### Original requirement represented in NEXUS
 
-NEXUS intentionally implements privacy-safe, defensible audience profiling rather than guessing sensitive traits for named users:
+The system must support multi-platform ingestion of live posts, user interactions and comments, and preserve a structured time-stamped historical database so conversation chronology can be reconstructed.
 
-- language distribution;
-- broad geography only when publicly/self-declared;
-- public professional-interest categories when the source supports them;
-- age bracket only if a source explicitly/supportably supplies it; otherwise `unknown`;
-- pseudonymous aggregation;
-- k-anonymity-style suppression of small groups;
-- coverage + confidence values.
+Platform priority is displayed explicitly in the UI:
 
-**Backend**
+- **ESSENTIAL:** X (formerly Twitter), Telegram
+- **DESIRABLE:** Instagram, Facebook
+- **APPRECIABLE:** Reddit, YouTube
 
-- `backend-ai/app/analytics.py` → `demographics(...)`
-- `backend-ai/app/db.py` → pseudonymous event persistence
+### Implementation
 
-**API**
+- Normalized event schema with root-post, comment/reply, parent and conversation identifiers.
+- SQLite historical event store with source timestamp and ingestion timestamp.
+- `LIVE / IMPORT / REPLAY` provenance preserved at event level.
+- Continuous collector / Live Watch.
+- Telegram Bot API + public monitored channel path.
+- X official API when configured; explicit public Post URL/oEmbed path and analyst import fallback when commercial API access is unavailable.
+- Instagram/Facebook authorized Meta paths.
+- Reddit, YouTube, Bluesky and Mastodon supplemental paths.
+- YouTube exact-video collection is fast-first for UX, then continues provider-bounded exhaustive public comment/reply collection in the background.
+
+### Backend
+
+- `backend-ai/app/db.py`
+- `backend-ai/app/advanced_collector.py`
+- `backend-ai/app/telegram_rich.py`
+- `backend-ai/app/youtube_staged.py`
+- `backend-ai/app/youtube_official.py`
+- `backend-ai/app/connectors.py`
+- `backend-ai/app/free_connectors.py`
+- `backend-ai/app/resilient_connectors.py`
+
+### API
+
+- `POST /api/search/workspace`
+- `POST /api/collector/start`
+- `POST /api/collector/stop`
+- source-specific connector endpoints
+- `GET /api/events`
+- `GET /api/timeline`
+
+### UI proof
+
+Open **PS26152 CORE** → Section **A**.
+
+It shows:
+
+- historical event count;
+- root posts vs comments/replies;
+- chronology span;
+- Live Watch status;
+- per-platform tier (`ESSENTIAL / DESIRABLE / APPRECIABLE`);
+- connector state;
+- current observed evidence.
+
+Then open **Timeline** to inspect source-timestamped chronology.
+
+---
+
+## B. Multi-Dimensional Sentiment Inference
+
+### Original requirement represented in NEXUS
+
+The system must go beyond positive/negative polarity and detect nuanced reactions such as sarcasm, anxiety, excitement, supportive/against positions, and show how those signals fluctuate along the established timeline.
+
+### Implementation
+
+NEXUS keeps **root-content inference separate from audience-reaction inference**.
+
+Signals include:
+
+- positive / neutral / negative polarity;
+- anxiety;
+- anger;
+- excitement;
+- sadness;
+- joy;
+- disgust;
+- surprise;
+- trust;
+- supportive / against / unclear stance;
+- sarcasm probability.
+
+### Backend
+
+- `backend-ai/app/advanced_analytics.py`
+- `backend-ai/app/reaction_engine.py`
+- `backend-ai/app/ps26152_timeline.py`
+- `backend-ai/app/complete_overview.py`
+
+### UI proof
+
+- **Posts / Explorer** → Public Reaction Intelligence for a selected root post/video.
+- **Timeline** → polarity movement chart **and** Emotion / Stance / Sarcasm fluctuation chart.
+- **PS26152 CORE** → Section **B** for aggregate audience sentiment, eight emotion dimensions, stance, sarcasm and time-window movement.
+
+No root post is treated as proof of public opinion when no audience reactions are captured.
+
+---
+
+## C. Automated Demographic Profiling
+
+### Original requirement represented in NEXUS
+
+Aggregate, anonymized audience demographics should include age brackets, geography, language and professional interests, using supportable public profile indicators, bio text and behavioral patterns.
+
+### Implementation
+
+- pseudonymous user aggregation;
+- language from observed text/profile signals;
+- broad geography from public/self-declared location only;
+- professional interests from public profile/bio first, with broad non-sensitive observed topic behavior as fallback;
+- age brackets only from explicit self-declared public indicators;
+- k-anonymity-style suppression for small groups;
+- coverage and confidence values;
+- no protected-trait guessing from names/photos.
+
+### Backend
+
+- `backend-ai/app/ps26152_demographics.py`
+- `backend-ai/app/db.py`
+
+### API
 
 - `GET /api/demographics`
 
-**UI**
+### UI proof
 
-- Demographics tab
+- **Demographics** tab;
+- **PS26152 CORE** → Section **C**.
 
-**Jury proof**
-
-Show language / broad geography / professional-interest cards, the minimum group size, and the privacy note. Explain that small groups are suppressed and the project does not invent protected personal traits.
+The UI must show unknown/low-coverage states honestly instead of fabricating demographic information that the platform does not expose.
 
 ---
 
-## 3. Real-Time Trend & Narrative Detection
+## D. Real-Time Trend & Topic Detection
 
-**What NEXUS implements**
+### Original requirement represented in NEXUS
 
-- semantic narrative clustering rather than exact hashtag-only counting;
-- chronology and earliest-observed evidence;
-- growth rate;
+Automatically identify, rank and predict rising trends, viral keywords and shifting discussions as they emerge chronologically.
+
+### Implementation
+
+Narrative ranking combines:
+
+- volume growth;
 - burst deviation;
-- unique-author diversity;
+- author diversity;
 - cross-platform presence;
-- engagement signal;
-- recency;
-- explainable trend status (`EMERGING`, `RISING`, `VIRAL`, `STABLE`, `DECLINING`);
-- correction / mutation lineage through source events.
+- engagement;
+- recency.
 
-**Backend**
+Forecast extension includes:
 
-- `backend-ai/app/analytics.py`
-  - clustering / narrative assignment
-  - `trend_metrics(...)`
-  - `narrative_summaries(...)`
-  - timeline and alerts
+- trend velocity;
+- momentum (`ACCELERATING / RISING / FLAT / DECLINING / FALLING_FAST`);
+- predicted next 15-minute bucket volume;
+- forecast confidence.
 
-**API**
+The requirement console also surfaces rising/shifting terms from the visible evidence window.
+
+### Backend
+
+- `backend-ai/app/advanced_analytics.py`
+- `backend-ai/app/scalable_clusters.py`
+- `backend-ai/app/complete_narratives.py`
+
+### API
 
 - `GET /api/trends`
 - `GET /api/narratives`
-- `GET /api/narratives/{narrative_id}`
+- `GET /api/narratives/{id}`
 - `GET /api/alerts`
 
-**UI**
+### UI proof
 
-- Overview priority narratives
-- Trends tab
-- Narrative lineage tab
-- Alerts tab
+- **Trends** → ranked narratives and trend decomposition;
+- **Narrative** → earliest-observed chronology and variants;
+- **PS26152 CORE** → Section **D** → top narrative, momentum, next-window forecast, rising/shifting terms.
 
-**Jury proof**
-
-Open **Trends**, choose the top narrative, show the score decomposition and lineage. State: **earliest observed means earliest inside our collected dataset, not absolute internet origin.**
+**Trust wording:** earliest observed means earliest in the collected dataset, not absolute internet origin.
 
 ---
 
-## 4. Link Analysis & Network Topology
+## E. Link Analysis & Network Topology
 
-**What NEXUS implements**
+### Original requirement represented in NEXUS
 
-Observed graph edges can arise from:
+Map follower/user relationships, identify nodes of high influence (key opinion leaders), and visualize how a trend or sentiment spreads from one user segment to another over time.
 
-- replies;
-- mentions;
-- shared domains / URLs;
-- time-bounded narrative co-amplification.
+### Implementation
 
-Graph outputs include:
+Graph relationships can include:
+
+**Direct observed relationships**
+
+- reply;
+- mention;
+- provider-observed public-follow relationship when available.
+
+**Lower-confidence co-discussion relationships**
+
+- shared domain;
+- shared hashtag;
+- shared topic;
+- narrative co-amplification.
+
+Network outputs include:
 
 - PageRank;
 - betweenness centrality;
 - degree centrality;
-- communities/components;
-- `High Reach Node` structural role;
-- `Bridge Node` structural role.
+- communities;
+- `High Reach Node`;
+- `Bridge Node`;
+- direct-vs-co-discussion edge counts;
+- relationship-type counts;
+- key opinion-leader candidates;
+- community first-observed time;
+- per-community sentiment mix;
+- cross-community flow weights;
+- segment adoption chronology.
 
-These describe **observed graph position**, not guilt, intent, ideology, bot identity, or maliciousness.
+### Backend
 
-**Backend**
+- `backend-ai/app/stable_views.py`
+- `backend-ai/app/ps26152_network.py`
+- `backend-ai/app/ps26152_intelligence.py`
 
-- `backend-ai/app/analytics.py` → `build_network(...)`
-- NetworkX graph algorithms
-
-**API**
+### API
 
 - `GET /api/network`
 - `GET /api/network?narrative_id=...`
-- network embedded in `GET /api/narratives/{id}`
+- network embedded in narrative detail.
 
-**UI**
+### UI proof
 
-- Network tab
-- Narrative network section
+Open **Network**.
 
-**Jury proof**
+The top workbench shows the interactive node/edge graph and Node Inspector. The additional **How trend & sentiment spread between user segments** section shows:
 
-Show one High Reach Node and one Bridge Node, then explain what PageRank/betweenness mean in the observed dataset.
+- relationship evidence types;
+- direct vs co-discussion counts;
+- cross-community flows;
+- community adoption chronology;
+- community sentiment mix.
 
----
+Open **PS26152 CORE** → Section **E** for the condensed audit view.
 
-# Platform Acquisition Traceability
-
-The four analytics vectors are independent of a single vendor API. All successful connectors normalize to `SocialEventIn` / `SocialEvent`.
-
-| Source | Primary/official path | Free/public/fallback path | Backend | API |
-|---|---|---|---|---|
-| X | X API v2 recent search | configured permitted RSS/public bridge + JSON import/replay | `connectors.py`, `free_connectors.py` | `POST /api/connectors/x/search`, `POST /api/connectors/x/public` |
-| Telegram | Bot API `getUpdates` with persistent in-process offset | zero-key public channel preview | `connectors.py`, `free_connectors.py` | `POST /api/connectors/telegram/poll`, `POST /api/connectors/telegram/public` |
-| Instagram | Meta Graph authorized account sync + official hashtag discovery (`ig_hashtag_search → recent_media`) | best-effort genuinely public profile path + import/replay | `connectors.py`, `meta_discovery.py`, `free_connectors.py` | `POST /api/connectors/meta/sync`, `POST /api/connectors/instagram/hashtag`, `POST /api/connectors/instagram/public` |
-| YouTube | YouTube Data API v3 video-first search + comments where available | zero-key `yt-dlp` public video metadata | `youtube_official.py`, `free_connectors.py` | `POST /api/connectors/youtube/search`, `POST /api/connectors/youtube/free` |
-| Bluesky | public AT Protocol | same | `free_connectors.py` | `POST /api/connectors/bluesky/search` |
-| Reddit | public JSON where allowed | OAuth/import fallback | `free_connectors.py` | `POST /api/connectors/reddit/search` |
-| Mastodon | public instance API | alternate instance/import | `free_connectors.py` | `POST /api/connectors/mastodon/search` |
-| Facebook | authorized Page Graph API | import/replay | `connectors.py` | `POST /api/connectors/meta/sync` |
-
-## Source truthfulness
-
-Every normalized event includes:
-
-- `platform`
-- `source_event_id`
-- `created_at`
-- `ingested_at`
-- source URL where available
-- `source_mode = LIVE | REPLAY | IMPORT`
-- `connector_run_id`
-- SHA-256 raw/provenance hash after normalization/persistence
-
-A connector failure never silently becomes demo data.
+Structural roles do **not** imply guilt, maliciousness, identity or intent.
 
 ---
 
-# Evidence & Trust Layer
+# Original Requirement Console
 
-**Backend**
+The frontend now includes a persistent **PS26152 CORE — 5/5 requirement view** button.
 
-- `backend-ai/app/certificates.py`
+This opens one audit-friendly console where the jury can see all five original requirements in the same place:
 
-**API**
+1. Collection & timeline
+2. Multi-dimensional sentiment
+3. Demographics
+4. Trends & prediction
+5. Link analysis & spread
 
-- `GET /api/certificates`
-- `GET /api/certificates/narrative/{id}`
-- `GET /api/certificates/alert/{id}`
+Each requirement shows both:
 
-**What it proves**
+- **implemented capability**, and
+- **current workspace evidence**.
 
-- snapshot hash;
-- witness hash;
-- algorithm/configuration hash;
-- witness posts;
-- witness graph nodes/edges;
-- coverage;
-- replayable result;
-- explicit `CERTIFIED` or `ABSTAIN`.
-
-**Policy**
-
-If minimum provenance/confidence requirements are not satisfied, the system abstains rather than presenting a high-impact narrative conclusion as verified.
+This distinction prevents a configured-but-unavailable external provider from being presented as successful live data.
 
 ---
 
-# Demo Resilience Requirement
+# Source Truthfulness
 
-The deterministic seeded scenario is not a hidden substitute for live collection. It is an explicit **REPLAY** resilience layer.
+Every normalized event preserves:
 
-- `POST /api/demo/seed`
-- fictional RiverLink / TechFest / Monsoon scenario
-- no third-party credentials required
-- all source modes are visible in UI
+- platform;
+- source event ID;
+- source timestamp;
+- ingestion timestamp;
+- source URL when available;
+- parent / conversation relationship when available;
+- `LIVE | IMPORT | REPLAY` mode;
+- connector run ID;
+- normalized provenance hash in persistence.
 
-Use one or two real live connectors to prove ingestion, then use deterministic data to reliably demonstrate all four analytics vectors even if venue internet or a commercial API is unavailable.
+A provider failure never silently becomes demo data.
 
 ---
 
-# Validation Traceability
+# Demo Strategy
 
-**Backend tests**
+For the strongest deterministic proof when venue connectivity/provider access is unreliable:
 
-- `test_core.py` — enrichment, deduplication, narratives, network, demographics
-- `test_free_connectors.py` — Telegram public HTML + RSS bridge parsers
-- `test_telegram_polling.py` — Bot API offset advancement
-- `test_youtube_official.py` — video retained when comments are disabled
-- `test_meta_discovery.py` — official Instagram hashtag two-step flow
-- `test_certificates.py` — evidence certificate / replay hash
-- `test_api_contracts.py` — health / connector API contracts
+1. use at least one real Telegram or YouTube live source;
+2. use **Demo** only as explicitly labelled `REPLAY` resilience evidence;
+3. open **PS26152 CORE** and walk A → E;
+4. open **Timeline** for emotion movement;
+5. open **Network** for propagation / key-node analysis;
+6. open **Evidence** to prove provenance.
 
-**Frontend**
+---
 
-- strict TypeScript build: `npm run build`
-
-**Spring gateway**
-
-- `mvn -B test package`
-- gateway proxies legacy, free-source, Instagram hashtag, and certificate endpoints
-
-**Preflight**
+# Validation
 
 From repository root:
 
 ```bat
-python scripts\preflight.py
+scripts\start_demo.bat
 ```
 
-The preflight checks required modules/docs, parses Python source/tests, validates frontend configuration and environment-variable coverage, and runs tests/builds when local dependencies are present.
+or:
+
+```bat
+.\.venv\Scripts\python.exe .\scripts\preflight.py
+```
+
+Do not describe a build as verified until the current branch head passes the local backend tests, TypeScript typecheck and production frontend build.
