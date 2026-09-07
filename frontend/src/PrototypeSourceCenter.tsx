@@ -21,6 +21,7 @@ type RichOverview = Overview & {
 type Snapshot = {
   connectors: ConnectorStatus[];
   events: SocialEvent[];
+  youtubeRoot: SocialEvent | null;
   overview: RichOverview;
   network: NetworkResponse;
   demographics: DemographicsResponse;
@@ -72,12 +73,20 @@ export default function PrototypeSourceCenter() {
 
   const refresh = useCallback(async () => {
     try {
-      const [connectors, events, overview, network, demographics, narratives, collector] = await Promise.all([
-        api.connectorStatus(), api.events(), api.overview(), api.network(), api.demographics(), api.narratives(), api.collectorStatus(),
+      const [connectors, events, youtubeRootPayload, overview, network, demographics, narratives, collector] = await Promise.all([
+        api.connectorStatus(),
+        api.events(),
+        jsonRequest('/api/events?limit=1&platform=youtube&newest_first=false'),
+        api.overview(),
+        api.network(),
+        api.demographics(),
+        api.narratives(),
+        api.collectorStatus(),
       ]);
       setSnapshot({
         connectors: connectors.connectors || [],
         events: events.events || [],
+        youtubeRoot: (youtubeRootPayload?.events || [])[0] || null,
         overview: overview as RichOverview,
         network,
         demographics,
@@ -196,11 +205,12 @@ export default function PrototypeSourceCenter() {
         live: rows.filter((event) => event.source_mode === 'LIVE').length,
       };
     };
-    const youtube = summarize('youtube');
-    const telegram = summarize('telegram');
-    const latestYoutubeRoot = events.find((event) => event.platform === 'youtube' && !isReaction(event));
-    return { youtube, telegram, profile: latestYoutubeRoot?.public_profile || {} };
-  }, [snapshot?.events]);
+    return {
+      youtube: summarize('youtube'),
+      telegram: summarize('telegram'),
+      profile: snapshot?.youtubeRoot?.public_profile || {},
+    };
+  }, [snapshot?.events, snapshot?.youtubeRoot]);
 
   const req = useMemo(() => {
     if (!snapshot) return [];
@@ -252,8 +262,8 @@ export default function PrototypeSourceCenter() {
             <label><span>Exact YouTube URL</span><input value={youtubeUrl} onChange={(event) => setYoutubeUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=..." /></label>
             <button className="psc-primary" disabled={!!busy || !youtubeUrl.trim()} onClick={() => void loadYouTube()}>{busy === 'YouTube fast-first load' ? <LoaderCircle className="psc-spin" size={15} /> : <Search size={15} />} Load video + comments/replies</button>
             <div className="psc-metrics">
-              <div><span>Visible evidence</span><strong>{stats.youtube.events}</strong><small>{stats.youtube.roots} root · {stats.youtube.reactions} rendered reactions</small></div>
-              <div><span>Captured reactions</span><strong>{youtubeCaptured}</strong><small>{youtubeReported ? `${youtubeReported} reported by YouTube` : 'provider-reported count unavailable'}</small></div>
+              <div><span>Visible evidence</span><strong>{stats.youtube.events}</strong><small>{stats.youtube.roots} root · {stats.youtube.reactions} rows in browser window</small></div>
+              <div><span>Captured reactions</span><strong>{youtubeCaptured}</strong><small>{youtubeReported ? `${youtubeReported} top-level comments reported by YouTube` : 'provider-reported count unavailable'}</small></div>
               <div><span>Background crawl</span><strong>{youtubeBg.toUpperCase()}</strong><small>{youtubeStop || 'fast-first then provider-bounded exhaustive'}</small></div>
             </div>
             <div className="psc-note"><ShieldCheck size={14} /> {youtubeConnector?.detail || 'Add YOUTUBE_API_KEY for official Data API comment/reply collection.'}</div>
