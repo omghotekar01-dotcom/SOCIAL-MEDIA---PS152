@@ -7,6 +7,15 @@ older internal functions before FastAPI/collector modules import them.
 from . import analytics as analytics
 from . import connectors as connectors
 from . import free_connectors as free_connectors
+from .telegram_rich import telegram_rich_poll
+from .youtube_official import youtube_official_search
+
+# IMPORTANT: patch connector functions before importing collector modules. Those
+# modules bind telegram_poll/youtube_search with `from .connectors import ...`;
+# patching afterwards would leave continuous collection on the legacy functions.
+connectors.telegram_poll = telegram_rich_poll
+connectors.youtube_search = youtube_official_search
+
 from .advanced_analytics import advanced_demographics, advanced_infer_text, advanced_trend_metrics
 from .advanced_collector import AdvancedCollectorManager, AdvancedCollectorStartRequest
 from .complete_alerts import complete_alerts
@@ -18,7 +27,6 @@ from .relationship_enrichment import bluesky_search_with_relationships
 from .resilient_connectors import instagram_resilient_profile, mastodon_resilient_search, reddit_resilient_search
 from .stable_views import stable_network, stable_timeline
 from .x_embed_resilience import x_resilient_oembed_or_bridge
-from .youtube_official import youtube_official_search
 
 # Backward-compatible public name retained for older preflight/tests/imports while
 # the active implementation is the hardened multi-endpoint X oEmbed connector.
@@ -39,9 +47,6 @@ analytics.seed_demo_events = complete_seed_demo_events
 analytics.alerts = complete_alerts
 analytics.timeline = stable_timeline
 analytics.build_network = stable_network
-
-# Video-first official YouTube implementation everywhere, including collector runs.
-connectors.youtube_search = youtube_official_search
 
 # Preserve route signatures while strengthening public/fallback behavior and
 # collecting linked public replies/comments where the provider exposes them.
