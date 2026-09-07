@@ -9,12 +9,13 @@ from . import connectors as connectors
 from . import free_connectors as free_connectors
 from .scalable_clusters import scalable_assign_clusters
 from .telegram_rich import telegram_rich_poll
-from .youtube_official import youtube_official_search
+from .youtube_staged import youtube_staged_search
 
 # Patch connector + clustering functions first. Collector modules bind these with
-# `from ... import ...`, so ordering matters.
+# `from ... import ...`, so ordering matters. Exact YouTube URLs use a fast-first
+# sample and continue exhaustive provider-bounded collection in the background.
 connectors.telegram_poll = telegram_rich_poll
-connectors.youtube_search = youtube_official_search
+connectors.youtube_search = youtube_staged_search
 analytics.assign_clusters = scalable_assign_clusters
 
 # Patch analysis primitives before alert_engine/stable_alerts are imported. This
