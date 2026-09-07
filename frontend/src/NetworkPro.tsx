@@ -1,9 +1,45 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Boxes, CircleDot, GitBranch, Network, RefreshCw, ShieldCheck, Users2 } from 'lucide-react';
+import { Boxes, CircleDot, GitBranch, Network, RefreshCw, ShieldCheck, Users2, Waypoints } from 'lucide-react';
 import { api, type GraphNode, type NetworkResponse } from './api';
 
 type Props = { network: NetworkResponse | null };
 type RoleFilter = 'all' | 'high' | 'bridge';
+
+type CommunityDetail = {
+  community: number;
+  events: number;
+  authors: number;
+  first_observed_at: string;
+  last_observed_at: string;
+  sentiment_mix: Record<string, number>;
+  stance_mix: Record<string, number>;
+  platform_mix: Record<string, number>;
+};
+
+type CrossCommunityFlow = {
+  source_community: number;
+  target_community: number;
+  weight: number;
+  edge_count: number;
+  types: Record<string, number>;
+};
+
+type SpreadPoint = {
+  time: string;
+  communities: Record<string, number>;
+  sentiment_balance: Record<string, number>;
+};
+
+type RichNetwork = NetworkResponse & {
+  edge_type_counts?: Record<string, number>;
+  direct_observed_edges?: number;
+  co_discussion_edges?: number;
+  key_opinion_leader_candidates?: GraphNode[];
+  communities_detail?: CommunityDetail[];
+  cross_community_flows?: CrossCommunityFlow[];
+  spread_timeline?: SpreadPoint[];
+  spread_method_note?: string;
+};
 
 const WIDTH = 1000;
 const HEIGHT = 620;
@@ -53,6 +89,11 @@ function centrality(node: GraphNode) {
   return Math.max(node.pagerank || 0, node.betweenness || 0, node.degree_centrality || 0);
 }
 
+function fmt(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+}
+
 export default function NetworkPro({ network: initialNetwork }: Props) {
   const [workspaceNetwork, setWorkspaceNetwork] = useState<NetworkResponse | null>(initialNetwork);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,7 +116,7 @@ export default function NetworkPro({ network: initialNetwork }: Props) {
 
   useEffect(() => { void refreshGlobal(); }, []);
 
-  const network = workspaceNetwork || initialNetwork;
+  const network = (workspaceNetwork || initialNetwork) as RichNetwork | null;
   const allNodes = network?.nodes || [];
 
   const filteredNodes = useMemo(() => {
@@ -96,7 +137,7 @@ export default function NetworkPro({ network: initialNetwork }: Props) {
       <section className="analysis-empty panel panel-large">
         <div className="analysis-empty-icon"><Network size={27} /></div>
         <h2>No interaction network yet</h2>
-        <p>NEXUS needs observed authors plus mentions, replies, shared domains, or narrative co-amplification before it can draw relationships. Fresh Search or Demo will populate this when the evidence contains those signals.</p>
+        <p>NEXUS needs observed authors plus mentions, replies, public relationships, shared domains, or co-discussion evidence before it can draw relationships.</p>
         <button className="evidence-export-btn" onClick={() => void refreshGlobal()} disabled={refreshing}><RefreshCw size={14} /> {refreshing ? 'Refreshing…' : 'Refresh graph'}</button>
         <div className="analysis-empty-note"><ShieldCheck size={15} /> An empty graph is shown honestly instead of inventing relationships.</div>
       </section>
@@ -106,10 +147,10 @@ export default function NetworkPro({ network: initialNetwork }: Props) {
   return (
     <div className="network-pro">
       <div className="analysis-summary-grid network-summary-grid">
-        <div className="analysis-summary-card"><Users2 size={17} /><span>Observed nodes</span><strong>{network.summary.nodes || 0}</strong><small>whole current workspace</small></div>
-        <div className="analysis-summary-card"><GitBranch size={17} /><span>Observed edges</span><strong>{network.summary.edges || 0}</strong><small>reply, mention, shared-domain or co-amplification</small></div>
-        <div className="analysis-summary-card"><Boxes size={17} /><span>Communities</span><strong>{network.summary.communities || 0}</strong><small>graph-structure groups</small></div>
-        <div className="analysis-summary-card"><CircleDot size={17} /><span>Bridge / reach</span><strong>{(network.summary.bridge_nodes || 0) + (network.summary.high_reach_nodes || 0)}</strong><small>structural roles only</small></div>
+        <div className="analysis-summary-card"><Users2 size={17} /><span>Observed nodes</span><strong>{network.summary.nodes || 0}</strong><small>authors in current workspace</small></div>
+        <div className="analysis-summary-card"><GitBranch size={17} /><span>Observed edges</span><strong>{network.summary.edges || 0}</strong><small>{network.direct_observed_edges || 0} direct · {network.co_discussion_edges || 0} co-discussion</small></div>
+        <div className="analysis-summary-card"><Boxes size={17} /><span>Communities</span><strong>{network.summary.communities || 0}</strong><small>structural user segments</small></div>
+        <div className="analysis-summary-card"><CircleDot size={17} /><span>Bridge / reach</span><strong>{(network.summary.bridge_nodes || 0) + (network.summary.high_reach_nodes || 0)}</strong><small>key influence candidates</small></div>
       </div>
 
       <section className="panel panel-large network-workbench">
@@ -129,9 +170,7 @@ export default function NetworkPro({ network: initialNetwork }: Props) {
         <div className="network-pro-layout">
           <div className="network-pro-canvas-wrap">
             <svg className="network-pro-canvas" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label="Observed social interaction graph">
-              <defs>
-                <filter id="nodeShadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="3" stdDeviation="4" floodOpacity="0.16" /></filter>
-              </defs>
+              <defs><filter id="nodeShadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="3" stdDeviation="4" floodOpacity="0.16" /></filter></defs>
               {edges.map((edge, index) => {
                 const source = positions.get(edge.source);
                 const target = positions.get(edge.target);
@@ -173,13 +212,30 @@ export default function NetworkPro({ network: initialNetwork }: Props) {
               </div>
             </>}
             <div className="network-ranked-list">
-              <div className="network-ranked-title">Top nodes in this view</div>
-              {ranked.slice(0, 8).map((node, index) => <button key={node.id} className={selected?.id === node.id ? 'active' : ''} onClick={() => setSelectedId(node.id)}><span>{index + 1}</span><div><strong>{node.label}</strong><small>{node.platform} · {node.role}</small></div><b>{node.pagerank.toFixed(3)}</b></button>)}
+              <div className="network-ranked-title">Key opinion-leader candidates</div>
+              {(network.key_opinion_leader_candidates || ranked).slice(0, 8).map((node, index) => <button key={node.id} className={selected?.id === node.id ? 'active' : ''} onClick={() => setSelectedId(node.id)}><span>{index + 1}</span><div><strong>{node.label}</strong><small>{node.platform} · {node.role}</small></div><b>{node.pagerank.toFixed(3)}</b></button>)}
             </div>
           </aside>
         </div>
 
-        <div className="analysis-trust-note"><ShieldCheck size={16} /><span>High Reach Node and Bridge Node describe position in the observed graph only. They do not imply identity, intent, guilt, coordination, or real-world influence beyond the collected evidence.</span></div>
+        <div className="analysis-trust-note"><ShieldCheck size={16} /><span>High Reach Node and Bridge Node describe position in the observed graph only. They do not imply identity, intent, guilt, coordination, or real-world influence beyond collected evidence.</span></div>
+      </section>
+
+      <section className="panel panel-large ps-network-spread-card">
+        <div className="analysis-section-head"><div><span className="eyebrow">SIH26152 · propagation analysis</span><h2>How trend & sentiment spread between user segments</h2><p>Communities act as structural user segments. Timestamped activity and cross-community edges expose observed propagation paths over time.</p></div><Waypoints size={20} /></div>
+        <div className="ps-network-spread-grid">
+          <div className="ps-network-block"><strong>Relationship evidence types</strong><div className="ps-network-chips">{Object.entries(network.edge_type_counts || {}).map(([type, count]) => <span key={type}>{type.replaceAll('-', ' ')} <b>{count}</b></span>)}</div><small>Direct observed edges (reply / mention / public-follow): {network.direct_observed_edges || 0}. Co-discussion edges: {network.co_discussion_edges || 0}.</small></div>
+          <div className="ps-network-block"><strong>Cross-community flows</strong><div className="ps-network-flow-list">{(network.cross_community_flows || []).slice(0, 8).map((flow, index) => <div key={`${flow.source_community}-${flow.target_community}-${index}`}><span>C{flow.source_community}</span><b>→</b><span>C{flow.target_community}</span><em>{flow.edge_count} edges · w {flow.weight.toFixed(2)}</em></div>)}{!(network.cross_community_flows || []).length && <small>No cross-community edge is observed yet.</small>}</div></div>
+        </div>
+        <div className="ps-network-spread-timeline"><strong>Segment adoption chronology</strong>{(network.spread_timeline || []).slice(-12).map((point) => <div key={point.time}><time>{fmt(point.time)}</time><span>{Object.entries(point.communities).map(([community, count]) => `Community ${community}: ${count}`).join(' · ') || 'No activity'}</span><b>{Object.keys(point.communities).length} active segment(s)</b></div>)}</div>
+        <div className="ps-network-community-list">{(network.communities_detail || []).slice(0, 8).map((community) => {
+          const sentiments = community.sentiment_mix || {};
+          const total = Object.values(sentiments).reduce((sum, value) => sum + value, 0);
+          const negative = total ? Math.round((sentiments.negative || 0) / total * 100) : 0;
+          const positive = total ? Math.round((sentiments.positive || 0) / total * 100) : 0;
+          return <div key={community.community}><strong>Community #{community.community}</strong><span>{community.authors} authors · {community.events} events</span><small>first {fmt(community.first_observed_at)} · +{positive}% / −{negative}% sentiment</small></div>;
+        })}</div>
+        <div className="analysis-trust-note"><ShieldCheck size={16} /><span>{network.spread_method_note || 'Spread analysis is bounded to timestamped observed/co-discussion evidence and does not imply coordination or intent.'}</span></div>
       </section>
     </div>
   );
