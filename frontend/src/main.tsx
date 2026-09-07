@@ -17,6 +17,7 @@ import './product-polish.css';
 import './analysis-pro.css';
 import './source-pro.css';
 import './view-fixes.css';
+import './analysis-hotfix.css';
 
 function NexusRuntime() {
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
