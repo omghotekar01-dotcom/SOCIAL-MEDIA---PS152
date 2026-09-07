@@ -9,16 +9,19 @@ import {
 } from './api';
 
 type RequirementState = 'STRONG' | 'PARTIAL' | 'EMPTY';
+type KeywordRow = { term: string; total: number; recent: number; previous: number; delta: number; growth: number; predicted_next_window: number; status: string };
+type RichOverview = Overview & {
+  root_content_events?: number;
+  reaction_events?: number;
+  reaction_sentiment_mix?: Record<string, number>;
+  reaction_stance_mix?: Record<string, number>;
+  keyword_intelligence?: { window_minutes?: number; keywords?: KeywordRow[]; shifting?: KeywordRow[]; scope_note?: string };
+};
 
 type Snapshot = {
   connectors: ConnectorStatus[];
   events: SocialEvent[];
-  overview: Overview & {
-    root_content_events?: number;
-    reaction_events?: number;
-    reaction_sentiment_mix?: Record<string, number>;
-    reaction_stance_mix?: Record<string, number>;
-  };
+  overview: RichOverview;
   network: NetworkResponse;
   demographics: DemographicsResponse;
   narratives: number;
@@ -75,7 +78,7 @@ export default function PrototypeSourceCenter() {
       setSnapshot({
         connectors: connectors.connectors || [],
         events: events.events || [],
-        overview: overview as Snapshot['overview'],
+        overview: overview as RichOverview,
         network,
         demographics,
         narratives: narratives.narratives?.length || 0,
@@ -108,7 +111,7 @@ export default function PrototypeSourceCenter() {
       return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : `${label} failed.`);
-      throw err;
+      return null;
     } finally { setBusy(null); }
   };
 
@@ -118,10 +121,11 @@ export default function PrototypeSourceCenter() {
       setError('Paste one exact public YouTube watch / youtu.be / Shorts / live / embed URL.');
       return;
     }
-    await run('YouTube conversation loaded', async () => {
-      const result = await api.searchWorkspace(target, { reset: true, limitPerSource: 15 });
-      return { inserted: result.inserted, received: result.received };
+    const result = await run('YouTube fast-first load', async () => {
+      const response = await api.searchWorkspace(target, { reset: true, limitPerSource: 15 });
+      return { inserted: response.inserted, received: response.received };
     });
+    if (result) setMessage('YouTube loaded: initial conversation evidence is usable now; exhaustive public comments/replies continue in the background and the dashboard refreshes automatically.');
   };
 
   const pollTelegram = async () => {
@@ -161,8 +165,8 @@ export default function PrototypeSourceCenter() {
     setBusy('Start Live Watch'); setError(''); setMessage('');
     try {
       const result = await api.startCollector(query, { telegram: true, x: false, youtube: false, interval: 60 });
-      setMessage('Live Watch started: Telegram Bot + monitored Telegram + Bluesky + Reddit + Mastodon run every 60 seconds.');
-      setSnapshot((current) => current ? { ...current, collector: result } as Snapshot : current);
+      setMessage('Live Watch started: Telegram Bot when configured + monitored Telegram + Bluesky + Reddit + Mastodon run every 60 seconds.');
+      setSnapshot((current) => current ? { ...current, collector: result } : current);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start Live Watch.');
@@ -183,9 +187,8 @@ export default function PrototypeSourceCenter() {
 
   const stats = useMemo(() => {
     const events = snapshot?.events || [];
-    const platformRows = (platform: string) => events.filter((event) => event.platform === platform);
     const summarize = (platform: string) => {
-      const rows = platformRows(platform);
+      const rows = events.filter((event) => event.platform === platform);
       return {
         events: rows.length,
         roots: rows.filter((event) => !isReaction(event)).length,
@@ -196,14 +199,13 @@ export default function PrototypeSourceCenter() {
     const youtube = summarize('youtube');
     const telegram = summarize('telegram');
     const latestYoutubeRoot = events.find((event) => event.platform === 'youtube' && !isReaction(event));
-    const profile = latestYoutubeRoot?.public_profile || {};
-    return { youtube, telegram, profile };
+    return { youtube, telegram, profile: latestYoutubeRoot?.public_profile || {} };
   }, [snapshot?.events]);
 
   const req = useMemo(() => {
     if (!snapshot) return [];
-    const events = snapshot.events.length;
-    const reactions = snapshot.events.filter(isReaction).length;
+    const events = Number(snapshot.overview.total_events || 0);
+    const reactions = Number(snapshot.overview.reaction_events ?? snapshot.events.filter(isReaction).length);
     const demoCoverage = Math.max(
       snapshot.demographics.language.coverage || 0,
       snapshot.demographics.broad_geography.coverage || 0,
@@ -212,10 +214,10 @@ export default function PrototypeSourceCenter() {
     );
     const edges = snapshot.network.summary.edges || 0;
     return [
-      ['A', 'Collection + Timeline', events > 0 ? (reactions > 0 ? 'STRONG' : 'PARTIAL') : 'EMPTY', `${events} events · ${reactions} comments/replies`],
-      ['B', 'Sentiment + Emotion', reactions > 0 ? 'STRONG' : events > 0 ? 'PARTIAL' : 'EMPTY', `${reactions} audience reactions available for polarity, 8 emotions, stance and sarcasm`],
+      ['A', 'Collection + Timeline', events > 0 ? (reactions > 0 ? 'STRONG' : 'PARTIAL') : 'EMPTY', `${events} full-population events · ${reactions} comments/replies`],
+      ['B', 'Sentiment + Emotion', reactions > 0 ? 'STRONG' : events > 0 ? 'PARTIAL' : 'EMPTY', `${reactions} audience reactions for polarity, 8 emotions, stance and sarcasm`],
       ['C', 'Demographics', demoCoverage >= 0.5 ? 'STRONG' : events > 0 ? 'PARTIAL' : 'EMPTY', `${snapshot.demographics.unique_anonymized_users} pseudonymous users · max signal coverage ${Math.round(demoCoverage * 100)}%`],
-      ['D', 'Trends + Topics', snapshot.narratives > 0 ? 'STRONG' : events > 0 ? 'PARTIAL' : 'EMPTY', `${snapshot.narratives} ranked narrative(s)`],
+      ['D', 'Trends + Topics', snapshot.narratives > 0 ? 'STRONG' : events > 0 ? 'PARTIAL' : 'EMPTY', `${snapshot.narratives} ranked narrative(s) · full-population keyword movement available`],
       ['E', 'Link Analysis', edges > 0 ? 'STRONG' : (snapshot.network.summary.nodes || 0) > 0 ? 'PARTIAL' : 'EMPTY', `${snapshot.network.summary.nodes || 0} nodes · ${edges} edges · ${snapshot.network.summary.communities || 0} communities`],
     ] as Array<[string, string, RequirementState, string]>;
   }, [snapshot]);
@@ -226,6 +228,7 @@ export default function PrototypeSourceCenter() {
   const youtubeCaptured = Number(stats.profile.captured_comment_count || stats.youtube.reactions || 0);
   const youtubeReported = Number(stats.profile.reported_comment_count || 0);
   const youtubeStop = String(stats.profile.collection_stop_reason || '');
+  const risingKeywords = (snapshot?.overview.keyword_intelligence?.keywords || []).filter((item) => item.status === 'VIRAL_KEYWORD' || item.status === 'RISING').slice(0, 6);
 
   return (
     <>
@@ -247,13 +250,13 @@ export default function PrototypeSourceCenter() {
           <section className="psc-source psc-youtube">
             <div className="psc-source-head"><div><Youtube size={20} /><span><b>1. YouTube — Full Public Conversation</b><small>Best live source for large comment/reply analytics</small></span></div><em>{youtubeConnector?.state || 'UNKNOWN'}</em></div>
             <label><span>Exact YouTube URL</span><input value={youtubeUrl} onChange={(event) => setYoutubeUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=..." /></label>
-            <button className="psc-primary" disabled={!!busy || !youtubeUrl.trim()} onClick={() => void loadYouTube()}>{busy === 'YouTube conversation loaded' ? <LoaderCircle className="psc-spin" size={15} /> : <Search size={15} />} Load video + comments/replies</button>
+            <button className="psc-primary" disabled={!!busy || !youtubeUrl.trim()} onClick={() => void loadYouTube()}>{busy === 'YouTube fast-first load' ? <LoaderCircle className="psc-spin" size={15} /> : <Search size={15} />} Load video + comments/replies</button>
             <div className="psc-metrics">
-              <div><span>Evidence</span><strong>{stats.youtube.events}</strong><small>{stats.youtube.roots} root · {stats.youtube.reactions} reactions</small></div>
+              <div><span>Visible evidence</span><strong>{stats.youtube.events}</strong><small>{stats.youtube.roots} root · {stats.youtube.reactions} rendered reactions</small></div>
               <div><span>Captured reactions</span><strong>{youtubeCaptured}</strong><small>{youtubeReported ? `${youtubeReported} reported by YouTube` : 'provider-reported count unavailable'}</small></div>
               <div><span>Background crawl</span><strong>{youtubeBg.toUpperCase()}</strong><small>{youtubeStop || 'fast-first then provider-bounded exhaustive'}</small></div>
             </div>
-            <div className="psc-note"><ShieldCheck size={14} /> The screen becomes usable after the fast first batch. The server continues through public comment/reply pages in the background; provider limits, disabled comments or quota are disclosed rather than hidden.</div>
+            <div className="psc-note"><ShieldCheck size={14} /> {youtubeConnector?.detail || 'Add YOUTUBE_API_KEY for official Data API comment/reply collection.'}</div>
           </section>
 
           <section className="psc-source psc-telegram">
@@ -261,23 +264,24 @@ export default function PrototypeSourceCenter() {
             <div className="psc-inline"><label><span>Public channel</span><input value={telegramChannel} onChange={(event) => setTelegramChannel(event.target.value)} placeholder="NexusSIHDemo" /></label><label><span>Topic filter</span><input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="RiverLink" /></label></div>
             <div className="psc-actions"><button disabled={!!busy} onClick={() => void pollTelegram()}><MessageCircle size={14} /> Poll Bot comments now</button><button disabled={!!busy} onClick={() => void loadTelegramPublic()}><Globe2 size={14} /> Read public channel</button></div>
             <div className="psc-metrics">
-              <div><span>Telegram evidence</span><strong>{stats.telegram.events}</strong><small>{stats.telegram.roots} root · {stats.telegram.reactions} comments/replies</small></div>
+              <div><span>Visible evidence</span><strong>{stats.telegram.events}</strong><small>{stats.telegram.roots} root · {stats.telegram.reactions} comments/replies</small></div>
               <div><span>LIVE rows</span><strong>{stats.telegram.live}</strong><small>Bot/public evidence only</small></div>
               <div><span>Continuous watch</span><strong>{snapshot?.collector.running ? 'RUNNING' : 'STOPPED'}</strong><small>{snapshot?.collector.running ? `${snapshot.collector.cycles} cycles` : 'one click below'}</small></div>
             </div>
-            <div className="psc-note"><ShieldCheck size={14} /> For comments, the bot must be visible in the linked discussion group. Create a NEW channel post and comments after bot setup; Bot API polling is not arbitrary historical chat download.</div>
+            <div className="psc-note"><ShieldCheck size={14} /> {telegramConnector?.detail || 'For discussion comments, the bot must be visible in the linked discussion group.'}</div>
           </section>
 
           <section className="psc-source">
             <div className="psc-source-head"><div><Activity size={20} /><span><b>3. Extra Public Coverage + Continuous Watch</b><small>Bluesky, Reddit, Mastodon and monitored Telegram complement the two primary demo sources</small></span></div></div>
             <div className="psc-actions"><button disabled={!!busy || !topic.trim()} onClick={() => void appendPublicMix()}><Database size={14} /> Append public mix</button>{!snapshot?.collector.running ? <button className="psc-watch" disabled={!!busy || !topic.trim()} onClick={() => void startWatch()}><Play size={14} /> Start 60s Live Watch</button> : <button className="psc-stop" disabled={!!busy} onClick={() => void stopWatch()}><Square size={13} /> Stop Live Watch</button>}<button disabled={!!busy} onClick={() => void refresh()}><RefreshCw size={14} /> Refresh</button></div>
-            <div className="psc-note"><Radio size={14} /> Live Watch uses Telegram Bot + monitored Telegram + Bluesky + Reddit + Mastodon by default. X remains explicit because unrestricted X search needs authorized API access.</div>
+            <div className="psc-note"><Radio size={14} /> Live Watch uses Telegram Bot when configured + monitored Telegram + Bluesky + Reddit + Mastodon. X remains explicit because unrestricted X search needs authorized provider access.</div>
           </section>
 
           <section className="psc-health">
-            <div className="psc-health-head"><div><ShieldCheck size={19} /><span><b>Original Problem Statement — 5/5 Health</b><small>Based on the active workspace, not hard-coded green checks</small></span></div></div>
+            <div className="psc-health-head"><div><ShieldCheck size={19} /><span><b>Original Problem Statement — 5/5 Health</b><small>Full-population backend metrics, not hard-coded green checks</small></span></div></div>
             <div className="psc-req-grid">{req.map(([id, title, state, detail]) => <Requirement key={id} id={id} title={title} state={state} detail={detail} />)}</div>
             <div className="psc-health-links"><span><Database size={13} /> A: collection/timeline</span><span><Activity size={13} /> B: sentiment/emotion</span><span><Users2 size={13} /> C: demographics</span><span><GitBranch size={13} /> D: trends/topics</span><span><Network size={13} /> E: link topology</span></div>
+            <div className="psc-keywords"><strong>Rising / viral terms</strong>{risingKeywords.length ? risingKeywords.map((item) => <span key={item.term}><b>{item.term}</b><em>{item.status.replaceAll('_', ' ')} · Δ {item.delta >= 0 ? '+' : ''}{item.delta} · next {item.predicted_next_window}</em></span>) : <small>No rising keyword currently crosses the observed-window threshold.</small>}</div>
             <div className="psc-note"><ShieldCheck size={14} /> Use the separate <b>PS26152 CORE</b> button for the full judge-facing A→E evidence view. This panel is the simple operator/checklist view.</div>
           </section>
         </div>
