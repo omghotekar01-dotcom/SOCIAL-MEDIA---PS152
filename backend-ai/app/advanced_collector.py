@@ -6,10 +6,10 @@ from typing import Any, Awaitable
 
 from pydantic import BaseModel, Field
 
-from . import free_connectors
+from . import connectors, free_connectors
 from .analytics import assign_clusters, enrich_event
 from .config import get_settings
-from .connectors import ConnectorError, meta_sync, telegram_poll, x_recent_search, youtube_search
+from .connectors import ConnectorError
 from .db import get_store
 from .schemas import MetaSyncRequest, SocialEventIn, XSearchRequest, YouTubeSearchRequest
 
@@ -154,7 +154,7 @@ class AdvancedCollectorManager:
             channel_spec = f"{SETTINGS.telegram_public_channels or 'NexusSIHDemo'}||{config.query}"
             jobs.append(("telegram_public", "telegram_public_preview", free_connectors.telegram_public_channel(channel_spec, 25)))
         if config.enable_telegram and SETTINGS.telegram_bot_token:
-            jobs.append(("telegram_bot", "telegram_bot_api", telegram_poll(100)))
+            jobs.append(("telegram_bot", "telegram_bot_api", connectors.telegram_poll(100)))
         if config.enable_bluesky:
             jobs.append(("bluesky", "public_atproto_thread", free_connectors.bluesky_search(config.query, 25)))
         if config.enable_reddit:
@@ -164,19 +164,21 @@ class AdvancedCollectorManager:
         if config.enable_youtube_free:
             jobs.append(("youtube_free", "yt_dlp_public_metadata", free_connectors.youtube_free_search(config.query, 8)))
 
-        # Premium/quota/authorized connectors remain deliberate opt-ins.
+        # Premium/quota/authorized connectors remain deliberate opt-ins. Module
+        # attribute lookup is intentional here: package init replaces YouTube and
+        # other connectors with hardened implementations before a collector cycle.
         if config.enable_x:
-            jobs.append(("x_official", "official_x_api_v2", x_recent_search(XSearchRequest(query=config.query, max_results=20))))
+            jobs.append(("x_official", "official_x_api_v2", connectors.x_recent_search(XSearchRequest(query=config.query, max_results=20))))
         if config.enable_youtube:
             jobs.append((
                 "youtube_official",
                 "youtube_data_api_v3",
-                youtube_search(YouTubeSearchRequest(query=config.query, max_videos=2, max_comments_per_video=15)),
+                connectors.youtube_search(YouTubeSearchRequest(query=config.query, max_videos=2, max_comments_per_video=15)),
             ))
         if config.enable_instagram_authorized:
-            jobs.append(("instagram", "meta_graph_authorized", meta_sync(MetaSyncRequest(source="instagram", limit=20))))
+            jobs.append(("instagram", "meta_graph_authorized", connectors.meta_sync(MetaSyncRequest(source="instagram", limit=20))))
         if config.enable_facebook_authorized:
-            jobs.append(("facebook", "meta_graph_authorized", meta_sync(MetaSyncRequest(source="facebook", limit=20))))
+            jobs.append(("facebook", "meta_graph_authorized", connectors.meta_sync(MetaSyncRequest(source="facebook", limit=20))))
 
         if jobs:
             await asyncio.gather(*(process(platform, connector, awaitable) for platform, connector, awaitable in jobs))
