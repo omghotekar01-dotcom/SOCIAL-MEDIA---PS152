@@ -9,6 +9,7 @@ from . import connectors as connectors
 from . import free_connectors as free_connectors
 from .priority_free_connectors import telegram_monitored_search
 from .resilient_connectors import instagram_resilient_profile, mastodon_resilient_search, reddit_resilient_search
+from .conversation_connectors import bluesky_search_with_replies, mastodon_search_with_replies, reddit_search_with_comments
 from .stable_alerts import stable_alerts
 from .stable_views import stable_network, stable_timeline
 from .x_embed_resilience import x_resilient_oembed_or_bridge
@@ -30,6 +31,7 @@ connectors.youtube_search = youtube_official_search
 # Preserve route signatures while strengthening public/fallback behavior.
 free_connectors.telegram_public_channel = telegram_monitored_search
 free_connectors.x_public_bridge = x_resilient_oembed_or_bridge
-free_connectors.reddit_public_search = reddit_resilient_search
-free_connectors.mastodon_search = mastodon_resilient_search
+free_connectors.bluesky_search = bluesky_search_with_replies
+free_connectors.reddit_public_search = reddit_search_with_comments
+free_connectors.mastodon_search = mastodon_search_with_replies
 free_connectors.instagram_public_profile = instagram_resilient_profile
