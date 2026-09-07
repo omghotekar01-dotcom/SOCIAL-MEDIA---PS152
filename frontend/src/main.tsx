@@ -27,7 +27,7 @@ import './live-watch.css';
 
 function NexusRuntime() {
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
-  const observedTotal = useRef<number | null>(null);
+  const youtubeFingerprint = useRef<string | null>(null);
 
   useEffect(() => {
     const refreshWorkspace = () => setWorkspaceVersion((value) => value + 1);
@@ -35,33 +35,51 @@ function NexusRuntime() {
     return () => window.removeEventListener('nexus:workspace-updated', refreshWorkspace);
   }, []);
 
-  // Background connector jobs must not make the analyst stare at a blocking
-  // spinner. Poll only the lightweight overview count and remount the console
-  // when evidence actually changes. This picks up the exhaustive YouTube crawl
-  // after the fast first sample has already made the UI usable.
+  // A fast-first YouTube request returns the root + first analytical sample while
+  // the server continues the exhaustive crawl. Poll only one lightweight root
+  // event, not /api/overview, so thousands of comments do not create a second
+  // expensive analytics workload every few seconds.
   useEffect(() => {
     let disposed = false;
     const probe = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/overview`, { cache: 'no-store' });
+        const response = await fetch(
+          `${API_BASE}/api/events?limit=1&platform=youtube&newest_first=false`,
+          { cache: 'no-store' },
+        );
         if (!response.ok) return;
-        const payload = await response.json() as { total_events?: number };
-        const next = Number(payload.total_events ?? 0);
-        if (observedTotal.current === null) {
-          observedTotal.current = next;
+        const payload = await response.json() as {
+          events?: Array<{
+            id: string;
+            public_profile?: Record<string, unknown>;
+          }>;
+        };
+        const root = payload.events?.[0];
+        if (!root) {
+          youtubeFingerprint.current = null;
           return;
         }
-        if (next !== observedTotal.current) {
-          observedTotal.current = next;
+        const profile = root.public_profile || {};
+        const state = String(profile.background_collection_state || 'idle');
+        const captured = Number(profile.captured_comment_count || 0);
+        const stopReason = String(profile.collection_stop_reason || '');
+        const fingerprint = `${root.id}|${state}|${captured}|${stopReason}`;
+
+        if (youtubeFingerprint.current === null) {
+          youtubeFingerprint.current = fingerprint;
+          return;
+        }
+        if (fingerprint !== youtubeFingerprint.current) {
+          youtubeFingerprint.current = fingerprint;
           if (!disposed) setWorkspaceVersion((value) => value + 1);
         }
       } catch {
-        // The normal app health/error surfaces handle backend outages.
+        // Normal NEXUS health/error surfaces handle backend outages.
       }
     };
 
     void probe();
-    const timer = window.setInterval(() => void probe(), 5000);
+    const timer = window.setInterval(() => void probe(), 4000);
     return () => {
       disposed = true;
       window.clearInterval(timer);
