@@ -16,14 +16,14 @@ def _reaction_alert_id(narrative_id: str, root_id: str, risk_score: int) -> str:
 
 
 def complete_alerts(store: EventStore) -> list[AlertOut]:
-    """Combine trend alerts with evidence-bounded audience-reaction attention alerts.
+    """Combine trend alerts with full-population audience-reaction alerts.
 
     Reaction alerts describe captured comments/replies only. They never classify a
     person or post as malicious, guilty, dangerous, or wrong; the alert simply
     surfaces a rapidly negative/polarized reaction environment for analyst review.
     """
     base = stable_alerts(store)
-    events = store.list_events(limit=5000)
+    events = store.list_events(limit=None)
     by_narrative = {alert.narrative_id: alert for alert in base}
     output = list(base)
 
