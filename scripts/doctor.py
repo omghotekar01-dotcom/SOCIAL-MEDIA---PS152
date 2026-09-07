@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import os
 import shutil
 import sys
 import urllib.error
@@ -46,7 +45,7 @@ def health() -> tuple[bool, str]:
 
 def status(label: str, ok: bool, detail: str) -> None:
     tag = "READY" if ok else "NEEDS SETUP"
-    print(f"[{tag:11}] {label:<18} {detail}")
+    print(f"[{tag:11}] {label:<21} {detail}")
 
 
 def main() -> int:
@@ -62,17 +61,41 @@ def main() -> int:
     status("Python", sys.version_info >= (3, 11), sys.version.split()[0])
     status("Node", shutil.which("node") is not None, shutil.which("node") or "not found")
 
-    print("\nSOURCE READINESS")
+    print("\nPRIMARY SIH SOURCE READINESS")
+    raw_channels = env.get("TELEGRAM_PUBLIC_CHANNELS", "")
+    channels = [item.strip().lstrip("@").strip("/") for item in raw_channels.replace(";", ",").split(",") if item.strip()]
     status(
-        "Telegram public",
+        "Telegram monitored",
+        bool(channels),
+        f"{len(channels)} public channel(s) configured for automatic Fresh Search" if channels else "set TELEGRAM_PUBLIC_CHANNELS=channel1,channel2 in local .env",
+    )
+    status(
+        "Telegram public manual",
         True,
-        "zero-key path available; needs a real public channel username",
+        "zero-key public-preview path available for a supplied public channel username",
     )
     status(
         "Telegram Bot API",
         present(env, "TELEGRAM_BOT_TOKEN"),
-        "TELEGRAM_BOT_TOKEN configured" if present(env, "TELEGRAM_BOT_TOKEN") else "set TELEGRAM_BOT_TOKEN in local .env",
+        "bot token configured for authorized live channel/chat updates" if present(env, "TELEGRAM_BOT_TOKEN") else "optional but recommended for your controlled live demo channel",
     )
+    status(
+        "X public URL oEmbed",
+        True,
+        "FREE official no-auth path ready; paste public X Post URL(s) into Free Source Lab",
+    )
+    status(
+        "X official search",
+        present(env, "X_BEARER_TOKEN"),
+        "X_BEARER_TOKEN configured" if present(env, "X_BEARER_TOKEN") else "optional pay-per-use search not configured; free global X search is not claimed",
+    )
+    status(
+        "X RSS/Atom bridge",
+        present(env, "X_PUBLIC_RSS_URL_TEMPLATE"),
+        "permitted bridge template configured" if present(env, "X_PUBLIC_RSS_URL_TEMPLATE") else "optional; explicit X Post URL oEmbed still works without it",
+    )
+
+    print("\nSECONDARY SOURCE READINESS")
     status(
         "YouTube zero-key",
         module_available("yt_dlp"),
@@ -82,16 +105,6 @@ def main() -> int:
         "YouTube official",
         present(env, "YOUTUBE_API_KEY"),
         "YOUTUBE_API_KEY configured" if present(env, "YOUTUBE_API_KEY") else "optional: add YOUTUBE_API_KEY",
-    )
-    status(
-        "X official",
-        present(env, "X_BEARER_TOKEN"),
-        "X_BEARER_TOKEN configured" if present(env, "X_BEARER_TOKEN") else "paid/approved access not configured; use import/replay or permitted bridge",
-    )
-    status(
-        "X public bridge",
-        present(env, "X_PUBLIC_RSS_URL_TEMPLATE"),
-        "bridge template configured" if present(env, "X_PUBLIC_RSS_URL_TEMPLATE") else "optional permitted RSS/Atom bridge not configured",
     )
     status(
         "Instagram public",
@@ -120,10 +133,12 @@ def main() -> int:
 
     print("\nWHAT TO SEND FOR DEBUGGING")
     print("1. This doctor output.")
-    print("2. Screenshot of Connection Center + any red error banner.")
-    print("3. The exact public channel/profile/query you tested.")
-    print("4. API-provider error text or screenshot with tokens/keys hidden.")
-    print("5. Never send bearer tokens, bot tokens, API secrets, passwords, cookies, or .env contents.")
+    print("2. Screenshot of Posts / Explorer and Connection Center.")
+    print("3. The exact SEARCH QUERY you tested.")
+    print("4. Telegram: public channel usernames you want monitored (public names are safe to share).")
+    print("5. X: one or more PUBLIC Post URLs you tested (public URLs are safe to share).")
+    print("6. API-provider error text/screenshots with all tokens and keys hidden.")
+    print("7. Never send bearer tokens, bot tokens, API secrets, passwords, cookies, session files, or .env contents.")
 
     if not backend_ok:
         print("\nNEXT: start NEXUS with scripts\\start_demo.bat, then run this doctor again.")
