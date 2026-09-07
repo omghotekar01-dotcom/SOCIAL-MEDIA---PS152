@@ -21,6 +21,8 @@ export default function ThemeController() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
+    const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    themeMeta?.setAttribute('content', theme === 'dark' ? '#0b0e14' : '#f5f7fb');
     try { window.localStorage.setItem(STORAGE_KEY, theme); } catch { /* noop */ }
   }, [theme]);
 
@@ -32,6 +34,7 @@ export default function ThemeController() {
       type="button"
       onClick={() => setTheme(next)}
       aria-label={`Switch to ${next} mode`}
+      aria-pressed={theme === 'dark'}
       title={`Switch to ${next} mode`}
     >
       <span className="theme-switcher-icon">{theme === 'light' ? <Sun size={16} /> : <Moon size={16} />}</span>
