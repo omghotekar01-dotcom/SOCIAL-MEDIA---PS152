@@ -18,14 +18,7 @@ def _bucket_time(dt: datetime, minutes: int) -> datetime:
 
 
 def stable_timeline(events: list[SocialEvent], minutes: int = 15) -> list[dict[str, Any]]:
-    """Return a continuous, chart-friendly chronology.
-
-    The previous implementation emitted only occupied buckets. A fresh live search
-    often places every event in the same 15-minute bucket, which leaves a line
-    chart with a single point and therefore no visible line. This version keeps
-    truthful counts while padding the observed range with zero-volume buckets so
-    the UI always has a readable chronology.
-    """
+    """Return a continuous, chart-friendly chronology using every supplied event."""
     if not events:
         return []
 
@@ -38,14 +31,11 @@ def stable_timeline(events: list[SocialEvent], minutes: int = 15) -> list[dict[s
     start = occupied[0]
     end = occupied[-1]
     step = timedelta(minutes=minutes)
-
-    # Add context on both sides. This is a zero-count visual/time-window pad, not
-    # synthetic evidence, and keeps a one-bucket workspace visible in Recharts.
     start -= step
     end += step
 
-    # Avoid pathological responses if imported evidence spans years. The API is
-    # an analyst visualization, so cap to the most recent 120 buckets.
+    # Visual cap only: event counts inside the displayed recent buckets remain
+    # truthful. This avoids rendering years of empty imported time buckets.
     total_buckets = int((end - start) / step) + 1
     if total_buckets > 120:
         start = end - step * 119
@@ -72,19 +62,28 @@ def _domain(url: str) -> str:
     return re.sub(r"^https?://", "", url).split("/")[0].lower().removeprefix("www.")
 
 
-def stable_network(events: list[SocialEvent], narrative_id: str | None = None) -> dict[str, Any]:
-    """Build an explainable observed/co-discussion network.
+def _unique_nodes(values: list[str]) -> list[str]:
+    return list(dict.fromkeys(value for value in values if value))
 
-    Strong edges represent replies, mentions, and provider-exposed public follow
-    relationships. Lower-weight edges represent shared domains, hashtags, topic
-    terms or narrative co-amplification. Co-discussion relationships are never
-    presented as proof that two accounts directly interacted.
+
+def stable_network(events: list[SocialEvent], narrative_id: str | None = None) -> dict[str, Any]:
+    """Build a scalable observed/co-discussion network.
+
+    Direct evidence (reply, mention, provider-reported public follow) is preserved
+    at full strength. Co-discussion relationships use inverted indexes rather than
+    O(N^2) all-author comparisons; members of each shared context are linked in a
+    deterministic chain with low weight, so every observed participant can remain
+    represented without inventing direct interactions.
     """
-    chosen = [e for e in events if narrative_id is None or e.narrative_cluster_id == narrative_id]
+    chosen = [event for event in events if narrative_id is None or event.narrative_cluster_id == narrative_id]
     graph = nx.DiGraph()
     event_author: dict[str, str] = {}
     handle_to_node: dict[str, str] = {}
-    author_events: dict[str, list[SocialEvent]] = defaultdict(list)
+
+    domain_members: dict[str, list[str]] = defaultdict(list)
+    hashtag_members: dict[str, list[str]] = defaultdict(list)
+    topic_members: dict[str, list[str]] = defaultdict(list)
+    narrative_members: dict[str, list[str]] = defaultdict(list)
 
     for event in chosen:
         node = event.author_pseudo_id
@@ -93,9 +92,20 @@ def stable_network(events: list[SocialEvent], narrative_id: str | None = None) -
         label = event.author_display or f"user-{node[:6]}"
         graph.add_node(node, platform=event.platform, label=label)
         event_author[event.source_event_id] = node
-        author_events[node].append(event)
         if event.author_display:
             handle_to_node[event.author_display.lower().lstrip("@")] = node
+
+        for url in event.urls:
+            if url.startswith("http"):
+                domain_members[_domain(url)].append(node)
+        for tag in event.hashtags:
+            if tag:
+                hashtag_members[tag.lower()].append(node)
+        for term in event.topic_terms:
+            if term:
+                topic_members[term.lower()].append(node)
+        if event.narrative_cluster_id:
+            narrative_members[event.narrative_cluster_id].append(node)
 
     def add_edge(source: str, target: str, edge_type: str, weight: float) -> None:
         if not source or not target or source == target:
@@ -106,7 +116,7 @@ def stable_network(events: list[SocialEvent], narrative_id: str | None = None) -
         else:
             graph.add_edge(source, target, weight=weight, types={edge_type})
 
-    # Direct observed interactions and provider-reported relationship evidence.
+    # Direct observed interactions.
     for event in chosen:
         source = event.author_pseudo_id
         if not source:
@@ -119,62 +129,73 @@ def stable_network(events: list[SocialEvent], narrative_id: str | None = None) -
                 add_edge(source, target, "mention", 1.5)
         following = (event.public_profile or {}).get("observed_following_handles") or []
         if isinstance(following, list):
-            for handle in following[:100]:
+            for handle in following[:250]:
                 target = handle_to_node.get(str(handle).lower().lstrip("@"))
                 if target:
                     add_edge(source, target, "public-follow", 1.15)
 
-    # Low-weight co-discussion relationships. These are deliberately bounded to
-    # avoid turning a shared keyword into a strong influence claim.
-    nodes = list(author_events)
-    for i, source in enumerate(nodes):
-        source_events = author_events[source]
-        source_domains = {_domain(url) for e in source_events for url in e.urls if url.startswith("http")}
-        source_tags = {tag.lower() for e in source_events for tag in e.hashtags}
-        source_topics = {term.lower() for e in source_events for term in e.topic_terms}
-        source_narratives = {e.narrative_cluster_id for e in source_events if e.narrative_cluster_id}
-        for target in nodes[i + 1 :]:
-            target_events = author_events[target]
-            target_domains = {_domain(url) for e in target_events for url in e.urls if url.startswith("http")}
-            target_tags = {tag.lower() for e in target_events for tag in e.hashtags}
-            target_topics = {term.lower() for e in target_events for term in e.topic_terms}
-            target_narratives = {e.narrative_cluster_id for e in target_events if e.narrative_cluster_id}
+    def connect_context(groups: dict[str, list[str]], edge_type: str, weight: float) -> None:
+        for members in groups.values():
+            unique = _unique_nodes(members)
+            if len(unique) < 2:
+                continue
+            # Chain rather than clique: O(total memberships), not O(group^2).
+            for source, target in zip(unique, unique[1:]):
+                add_edge(source, target, edge_type, weight)
 
-            weight = 0.0
-            types: list[str] = []
-            if source_domains & target_domains:
-                weight += 0.55
-                types.append("shared-domain")
-            if source_tags & target_tags:
-                weight += 0.45
-                types.append("shared-hashtag")
-            if len(source_topics & target_topics) >= 2:
-                weight += 0.30
-                types.append("shared-topic")
-            if source_narratives & target_narratives:
-                weight += 0.25
-                types.append("narrative-coamplification")
-
-            if weight > 0:
-                for edge_type in types:
-                    add_edge(source, target, edge_type, weight / len(types))
+    connect_context(domain_members, "shared-domain", 0.45)
+    connect_context(hashtag_members, "shared-hashtag", 0.35)
+    connect_context(topic_members, "shared-topic", 0.16)
+    connect_context(narrative_members, "narrative-coamplification", 0.14)
 
     if graph.number_of_nodes() == 0:
-        return {"nodes": [], "edges": [], "summary": {"nodes": 0, "edges": 0, "communities": 0, "high_reach_nodes": 0, "bridge_nodes": 0}}
+        return {
+            "nodes": [],
+            "edges": [],
+            "summary": {
+                "nodes": 0,
+                "edges": 0,
+                "communities": 0,
+                "high_reach_nodes": 0,
+                "bridge_nodes": 0,
+                "analysis_mode": "empty",
+            },
+        }
 
     undirected = graph.to_undirected()
-    pagerank = nx.pagerank(graph, weight="weight") if graph.number_of_edges() else {n: 0.0 for n in graph.nodes}
-    betweenness = nx.betweenness_centrality(undirected, normalized=True) if graph.number_of_nodes() > 2 else {n: 0.0 for n in graph.nodes}
-    degree = nx.degree_centrality(undirected) if graph.number_of_nodes() > 1 else {n: 0.0 for n in graph.nodes}
+    node_count = graph.number_of_nodes()
+    pagerank = nx.pagerank(graph, weight="weight") if graph.number_of_edges() else {node: 0.0 for node in graph.nodes}
+
+    # Exact betweenness becomes expensive on large comment networks. NetworkX's
+    # sampled form remains reproducible and preserves structural ranking utility.
+    if node_count > 500:
+        sample_k = min(200, node_count)
+        betweenness = nx.betweenness_centrality(undirected, k=sample_k, normalized=True, seed=42)
+        centrality_mode = f"sampled-betweenness-k{sample_k}"
+    else:
+        betweenness = nx.betweenness_centrality(undirected, normalized=True) if node_count > 2 else {node: 0.0 for node in graph.nodes}
+        centrality_mode = "exact-betweenness"
+
+    degree = nx.degree_centrality(undirected) if node_count > 1 else {node: 0.0 for node in graph.nodes}
 
     try:
-        communities = list(nx.community.greedy_modularity_communities(undirected, weight="weight")) if graph.number_of_edges() else [{n} for n in graph.nodes]
+        if graph.number_of_edges() and node_count > 800 and hasattr(nx.community, "louvain_communities"):
+            communities = list(nx.community.louvain_communities(undirected, weight="weight", seed=42))
+            community_mode = "louvain"
+        elif graph.number_of_edges():
+            communities = list(nx.community.greedy_modularity_communities(undirected, weight="weight"))
+            community_mode = "greedy-modularity"
+        else:
+            communities = [{node} for node in graph.nodes]
+            community_mode = "isolated"
     except Exception:
-        communities = [{n} for n in graph.nodes]
-    community_by_node = {node: index for index, community in enumerate(communities) for node in community}
+        communities = [{node} for node in graph.nodes]
+        community_mode = "fallback-isolated"
 
+    community_by_node = {node: index for index, community in enumerate(communities) for node in community}
     pr_values = list(pagerank.values()) or [0.0]
     reach_threshold = max(0.08, float(np.percentile(pr_values, 75)))
+
     output_nodes: list[dict[str, Any]] = []
     for node, attrs in graph.nodes(data=True):
         pr = float(pagerank.get(node, 0.0))
@@ -221,5 +242,7 @@ def stable_network(events: list[SocialEvent], narrative_id: str | None = None) -
             "communities": len(communities),
             "high_reach_nodes": sum(1 for node in output_nodes if node["role"] == "High Reach Node"),
             "bridge_nodes": sum(1 for node in output_nodes if node["role"] == "Bridge Node"),
+            "analysis_mode": f"full-observed-edges + {centrality_mode} + {community_mode}",
+            "co_discussion_method": "inverted-context chain; low-weight similarity edges are not direct-interaction claims",
         },
     }
