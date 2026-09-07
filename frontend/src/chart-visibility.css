@@ -1,0 +1,11 @@
+/* Final chart visibility guardrails — loaded after the rest of the product CSS. */
+.timeline-pro,.narrative-layout,.narrative-graph-block{min-width:0}
+.timeline-chart-card,.narrative-layout>.panel,.narrative-graph-block{overflow:visible!important}
+.timeline-chart-shell,.narrative-graph-shell{position:relative!important;display:block!important;width:100%!important;min-width:280px!important;visibility:visible!important;opacity:1!important}
+.timeline-chart-shell{height:430px!important;min-height:360px!important}
+.narrative-graph-shell{height:390px!important;min-height:360px!important}
+.timeline-chart-shell>.recharts-responsive-container,.narrative-graph-shell>.recharts-responsive-container{display:block!important;width:100%!important;height:100%!important;min-width:280px!important;min-height:320px!important;visibility:visible!important;opacity:1!important}
+.timeline-chart-shell .recharts-wrapper,.narrative-graph-shell .recharts-wrapper{display:block!important;min-width:280px!important;visibility:visible!important;opacity:1!important}
+.timeline-chart-shell svg,.narrative-graph-shell svg{display:block!important;visibility:visible!important;opacity:1!important;overflow:visible!important}
+.timeline-chart-shell .recharts-cartesian-grid,.timeline-chart-shell .recharts-layer,.narrative-graph-shell .recharts-cartesian-grid,.narrative-graph-shell .recharts-layer{visibility:visible!important;opacity:1}
+@media(max-width:760px){.timeline-chart-shell,.narrative-graph-shell{min-width:0!important;height:350px!important;min-height:330px!important}.timeline-chart-shell>.recharts-responsive-container,.narrative-graph-shell>.recharts-responsive-container{min-width:0!important}}
