@@ -4,6 +4,7 @@ from collections import Counter
 from typing import Any
 
 from .advanced_analytics import EMOTION_LEXICONS_V2, advanced_overview
+from .ps26152_intelligence import _keyword_intelligence
 from .reaction_engine import is_reaction, workspace_reaction_overview
 
 
@@ -30,6 +31,7 @@ def complete_overview(store) -> dict[str, Any]:
         label: round(float(emotion_totals.get(label, 0.0)) / denom, 4)
         for label in EMOTION_LEXICONS_V2
     }
+    latest = max((event.created_at for event in events), default=None)
 
     return {
         **base,
@@ -37,7 +39,7 @@ def complete_overview(store) -> dict[str, Any]:
         "platform_mix": dict(platforms),
         "source_modes": dict(source_modes),
         "sentiment_mix": dict(overall_sentiment),
-        "latest_event_at": max((event.created_at for event in events), default=None),
+        "latest_event_at": latest,
         "root_content_events": len(roots),
         "reaction_events": len(reactions),
         "root_sentiment_mix": dict(root_sentiment),
@@ -45,6 +47,7 @@ def complete_overview(store) -> dict[str, Any]:
         "reaction_stance_mix": dict(reaction_stance),
         "emotion_mix": emotion_mix,
         "reaction_overview": workspace_reaction_overview(events),
+        "keyword_intelligence": _keyword_intelligence(events, latest),
         "analytics_population": "all events in the active workspace; no 500/5000 reaction sampling cap",
         "sentiment_separation_note": (
             "Root-content sentiment and audience-reaction sentiment are reported separately so the author's message is not mistaken for public opinion."
