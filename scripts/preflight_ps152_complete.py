@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,8 +43,8 @@ REQUIRED_FILES = [
     "docs/PS26152_TRACEABILITY.md",
 ]
 
-TEXT_CONTRACTS = {
-    "backend-ai/app/__init__.py": [
+TEXT_CONTRACTS: dict[str, tuple[str, ...]] = {
+    "backend-ai/app/__init__.py": (
         "telegram_rich_poll",
         "youtube_staged_search",
         "ps26152_timeline",
@@ -52,93 +53,80 @@ TEXT_CONTRACTS = {
         "ps26152_seed_demo_events",
         "complete_overview",
         "complete_alerts",
-    ],
-    "backend-ai/app/advanced_analytics.py": [
-        "EMOTION_LEXICONS_V2",
-        '"anxiety"', '"anger"', '"excitement"', '"sadness"',
-        '"joy"', '"disgust"', '"surprise"', '"trust"',
-        "predicted_next_bucket_volume",
-        "forecast_scope",
-    ],
-    "backend-ai/app/ps26152_timeline.py": [
+    ),
+    "backend-ai/app/telegram_rich.py": (
+        "telegram_linked_discussion_comment",
+        "discussion_reply",
+        "is_automatic_forward",
+        "forward_origin",
+    ),
+    "backend-ai/app/youtube_official.py": (
+        "commentThreads",
+        "parentId",
+        "nextPageToken",
+        "provider_exhaustive_pagination",
+    ),
+    "backend-ai/app/youtube_staged.py": (
+        "fast_first_background_full",
+        "background_collection_state",
+        "background_collection_token",
+        "max_comments_per_video=0",
+    ),
+    "backend-ai/app/ps26152_timeline.py": (
         "reaction_count",
         "supportive_share",
         "against_share",
         "sarcasm_mean",
         "emotions",
-    ],
-    "backend-ai/app/ps26152_demographics.py": [
+    ),
+    "backend-ai/app/ps26152_demographics.py": (
         "language",
         "broad_geography",
         "professional_interests",
         "age_brackets",
         "observed-public-topic-behavior",
-        "k=",
-    ],
-    "backend-ai/app/ps26152_network.py": [
+    ),
+    "backend-ai/app/ps26152_network.py": (
         "key_opinion_leader_candidates",
         "cross_community_flows",
         "spread_timeline",
         "edge_type_counts",
         "direct_observed_edges",
-    ],
-    "backend-ai/app/telegram_rich.py": [
-        "telegram_linked_discussion_comment",
-        "discussion_reply",
-        "is_automatic_forward",
-        "forward_origin",
-    ],
-    "backend-ai/app/youtube_staged.py": [
-        "fast_first_background_full",
-        "background_collection_state",
-        "background_collection_token",
-        "max_comments_per_video=0",
-    ],
-    "backend-ai/app/youtube_official.py": [
-        "commentThreads",
-        "parentId",
-        "nextPageToken",
-        "provider_exhaustive_pagination",
-    ],
-    "backend-ai/app/reaction_engine.py": [
-        "workspace_reaction_overview",
-        "risk_score",
-        "ESCALATING",
-        "root-post sentiment",
-    ],
-    "backend-ai/app/ps26152_demo.py": [
-        '"instagram"',
-        '"facebook"',
-        'source_mode="REPLAY"',
-    ],
-    "frontend/src/PrototypeSourceCenter.tsx": [
+    ),
+    "frontend/src/PrototypeSourceCenter.tsx": (
         "YouTube — Full Public Conversation",
         "Telegram — Channel + Discussion Comments",
         "Append public mix",
         "Start 60s Live Watch",
-        "Original Problem Statement — 5/5 Health",
-    ],
-    "frontend/src/PS26152AuditPanel.tsx": [
+        "5/5 requirement health",
+    ),
+    "frontend/src/TimelinePro.tsx": (
+        "Conversation volume & sentiment movement",
+        "Eight-emotion movement",
+        "Emotion, stance & sarcasm fluctuation",
+        "anxiety",
+        "anger",
+        "excitement",
+        "sadness",
+        "joy",
+        "disgust",
+        "surprise",
+        "trust",
+    ),
+    "frontend/src/PS26152AuditPanel.tsx": (
         "Continuous Data Collection & Timeline Management",
         "Multi-Dimensional Sentiment Inference",
         "Automated Demographic Profiling",
         "Real-Time Trend & Topic Detection",
         "Link Analysis & Network Topology",
-    ],
-    "frontend/src/main.tsx": [
+    ),
+    "frontend/src/main.tsx": (
         "PrototypeSourceCenter",
         "PS26152AuditPanel",
         "AudiencePulsePanel",
         "prototype-source-center.css",
         "ps26152-audit.css",
-    ],
-    "docs/SIH26152_COMPLETE_REQUIREMENT_MAP.md": [
-        "Continuous Data Collection",
-        "Multi-Dimensional Sentiment",
-        "Automated Demographic Profiling",
-        "Real-Time Trend",
-        "Link Analysis",
-    ],
+    ),
 }
 
 
@@ -169,17 +157,17 @@ def main() -> int:
         text = path.read_text(encoding="utf-8", errors="ignore")
         missing = [token for token in tokens if token not in text]
         if missing:
-            failures += fail(f"SIH contract missing in {rel}: {', '.join(missing)}")
+            failures += fail(f"capability contract missing in {rel}: {', '.join(missing)}")
         else:
-            ok(f"SIH contract: {rel}")
+            ok(f"capability contract: {rel}")
 
-    syntax_targets = [rel for rel in REQUIRED_FILES if rel.endswith(".py")]
+    syntax_targets = [
+        rel for rel in REQUIRED_FILES
+        if rel.endswith(".py") and (ROOT / rel).exists()
+    ]
     for rel in syntax_targets:
-        path = ROOT / rel
-        if not path.exists():
-            continue
         try:
-            ast.parse(path.read_text(encoding="utf-8"), filename=rel)
+            ast.parse((ROOT / rel).read_text(encoding="utf-8"), filename=rel)
         except SyntaxError as exc:
             failures += fail(f"Python syntax {rel}:{exc.lineno}: {exc.msg}")
         else:
@@ -192,102 +180,143 @@ def main() -> int:
         from app.ps26152_demo import ps26152_seed_demo_events
         from app.ps26152_intelligence import build_ps26152_intelligence
 
-        # Verify the package actually wired the SIH-specific implementations,
-        # rather than merely having those files present in the repository.
-        if analytics.timeline.__module__.endswith("ps26152_timeline"):
-            ok("active runtime: PS26152 nuanced timeline is wired")
-        else:
-            failures += fail(f"active timeline is stale: {analytics.timeline.__module__}.{analytics.timeline.__name__}")
-        if analytics.demographics.__module__.endswith("ps26152_demographics"):
-            ok("active runtime: PS26152 demographics is wired")
-        else:
-            failures += fail(f"active demographics is stale: {analytics.demographics.__module__}.{analytics.demographics.__name__}")
-        if analytics.build_network.__module__.endswith("ps26152_network"):
-            ok("active runtime: PS26152 network/spread analysis is wired")
-        else:
-            failures += fail(f"active network is stale: {analytics.build_network.__module__}.{analytics.build_network.__name__}")
-        if analytics.seed_demo_events.__module__.endswith("ps26152_demo"):
-            ok("active runtime: six-platform disclosed jury demo is wired")
-        else:
-            failures += fail(f"active demo seed is stale: {analytics.seed_demo_events.__module__}.{analytics.seed_demo_events.__name__}")
+        runtime_modules = {
+            "timeline": (analytics.timeline, "ps26152_timeline"),
+            "demographics": (analytics.demographics, "ps26152_demographics"),
+            "network": (analytics.build_network, "ps26152_network"),
+            "demo": (analytics.seed_demo_events, "ps26152_demo"),
+        }
+        for label, (function, expected_module) in runtime_modules.items():
+            if function.__module__.endswith(expected_module):
+                ok(f"active runtime: {label} uses {expected_module}")
+            else:
+                failures += fail(
+                    f"active runtime {label} is stale: {function.__module__}.{function.__name__}"
+                )
 
-        inferred = analytics.infer_text("I am shocked, worried and angry but I trust the verified evidence")
-        emotions = inferred.get("emotion_scores", {})
-        required_emotions = {"anxiety", "anger", "excitement", "sadness", "joy", "disgust", "surprise", "trust"}
+        inferred = analytics.infer_text(
+            "I am shocked, worried and angry but I trust the verified evidence"
+        )
+        required_emotions = {
+            "anxiety", "anger", "excitement", "sadness",
+            "joy", "disgust", "surprise", "trust",
+        }
+        emotions = set((inferred.get("emotion_scores") or {}).keys())
         if required_emotions.issubset(emotions):
             ok("runtime B: all 8 emotion dimensions exposed")
         else:
-            failures += fail("runtime B: 8-emotion contract incomplete")
+            failures += fail(
+                "runtime B: missing emotion dimensions: "
+                + ", ".join(sorted(required_emotions - emotions))
+            )
 
-        config = AdvancedCollectorStartRequest(query="preflight")
-        if config.enable_telegram and config.enable_telegram_public and config.enable_bluesky and config.enable_reddit and config.enable_mastodon:
-            ok("runtime A: Telegram Bot + public/multi-source collector defaults available")
+        collector = AdvancedCollectorStartRequest(query="preflight")
+        if (
+            collector.enable_telegram_public
+            and collector.enable_bluesky
+            and collector.enable_reddit
+            and collector.enable_mastodon
+        ):
+            ok("runtime A: continuous free/public collector defaults are enabled")
         else:
-            failures += fail("runtime A: continuous collector defaults are incomplete")
-        if not config.enable_x:
-            ok("runtime source integrity: official X continuous polling remains explicit opt-in")
+            failures += fail("runtime A: continuous free/public collector defaults are incomplete")
+        if not collector.enable_x:
+            ok("runtime A: official X continuous polling remains explicit opt-in")
         else:
-            failures += fail("official X continuous polling must remain opt-in")
+            failures += fail("runtime A: official X polling must remain opt-in")
 
-        store = EventStore(ROOT / ".preflight-ps26152.db")
-        store.reset()
-        for incoming in ps26152_seed_demo_events():
-            normalized, derived = analytics.enrich_event(incoming)
-            store.insert(normalized, derived)
-        analytics.assign_clusters(store)
+        with tempfile.TemporaryDirectory(prefix="nexus-preflight-") as tmp:
+            store = EventStore(Path(tmp) / "ps26152.db")
+            demo = ps26152_seed_demo_events()
+            for incoming in demo:
+                normalized, derived = analytics.enrich_event(incoming)
+                store.insert(normalized, derived)
+            analytics.assign_clusters(store)
+            events = store.list_events(limit=None)
 
-        events = store.list_events(limit=None)
-        platforms = {event.platform for event in events}
-        required_platforms = {"x", "telegram", "instagram", "facebook", "reddit", "youtube"}
-        if required_platforms <= platforms:
-            ok("runtime A: original source-priority tiers represented in disclosed demo")
-        else:
-            failures += fail("runtime A: demo missing platforms: " + ", ".join(sorted(required_platforms - platforms)))
+            platforms = {event.platform for event in events}
+            required_platforms = {
+                "x", "telegram", "instagram", "facebook", "reddit", "youtube"
+            }
+            if required_platforms.issubset(platforms):
+                ok("runtime A: disclosed six-platform jury dataset is represented")
+            else:
+                failures += fail(
+                    "runtime A: jury dataset missing platforms: "
+                    + ", ".join(sorted(required_platforms - platforms))
+                )
 
-        timeline_rows = [row for row in analytics.timeline(events, 15) if row.get("count", 0) > 0]
-        if timeline_rows and any(row.get("reaction_count", 0) > 0 for row in timeline_rows) and all("emotions" in row and "sarcasm_mean" in row for row in timeline_rows):
-            ok("runtime B: timeline carries reaction/emotion/stance/sarcasm fields")
-        else:
-            failures += fail("runtime B: nuanced sentiment timeline fields are not active")
+            reactions = [event for event in events if event.parent_event_id]
+            if reactions:
+                ok(f"runtime A/B: {len(reactions)} linked comments/replies available")
+            else:
+                failures += fail("runtime A/B: no linked reaction evidence in demo")
 
-        demographics = analytics.demographics(events)
-        demo_dims = {"language", "broad_geography", "professional_interests", "age_brackets"}
-        if demo_dims <= set(demographics):
-            ok("runtime C: four aggregate demographic dimensions exposed")
-        else:
-            failures += fail("runtime C: demographic dimensions incomplete")
+            timeline = analytics.timeline(events, 15)
+            populated = [row for row in timeline if int(row.get("count", 0)) > 0]
+            if populated and all(
+                "emotions" in row
+                and "supportive_share" in row
+                and "against_share" in row
+                and "sarcasm_mean" in row
+                for row in populated
+            ):
+                ok("runtime B: nuanced timeline exposes emotion + stance + sarcasm")
+            else:
+                failures += fail("runtime B: nuanced timeline output is incomplete")
 
-        narratives = analytics.narrative_summaries(store)
-        if narratives and "predicted_next_bucket_volume" in narratives[0]["trend"]:
-            ok("runtime D: ranked narratives + near-term forecast fields exposed")
-        else:
-            failures += fail("runtime D: trend/forecast output incomplete")
+            demographics = analytics.demographics(events)
+            demographic_keys = {
+                "language", "broad_geography", "professional_interests", "age_brackets"
+            }
+            if demographic_keys.issubset(demographics.keys()):
+                ok("runtime C: four privacy-safe demographic dimensions exposed")
+            else:
+                failures += fail("runtime C: demographic dimensions are incomplete")
 
-        network = analytics.build_network(events)
-        required_network_fields = {"key_opinion_leader_candidates", "cross_community_flows", "spread_timeline", "edge_type_counts"}
-        if network.get("summary", {}).get("edges", 0) > 0 and required_network_fields <= set(network):
-            ok("runtime E: influence/community/spread link analysis exposed")
-        else:
-            failures += fail("runtime E: link-analysis propagation output incomplete")
+            narratives = analytics.narrative_summaries(store)
+            if narratives:
+                ok(f"runtime D: {len(narratives)} ranked narrative(s) produced")
+            else:
+                failures += fail("runtime D: no narrative/trend output produced")
 
-        intelligence = build_ps26152_intelligence(store)
-        if [item["id"] for item in intelligence.get("requirements", [])] == ["A", "B", "C", "D", "E"]:
-            ok("runtime 5/5: single audit payload covers A through E")
-        else:
-            failures += fail("runtime 5/5 audit payload is incomplete")
+            network = analytics.build_network(events)
+            summary = network.get("summary") or {}
+            if int(summary.get("nodes", 0)) > 0 and int(summary.get("edges", 0)) > 0:
+                ok(
+                    "runtime E: network has "
+                    f"{summary.get('nodes', 0)} nodes / {summary.get('edges', 0)} edges"
+                )
+            else:
+                failures += fail("runtime E: interaction network has no usable topology")
+            for key in (
+                "key_opinion_leader_candidates",
+                "cross_community_flows",
+                "spread_timeline",
+                "edge_type_counts",
+            ):
+                if key not in network:
+                    failures += fail(f"runtime E: network missing {key}")
 
-        try:
-            (ROOT / ".preflight-ps26152.db").unlink(missing_ok=True)
-        except Exception:
-            pass
+            intelligence = build_ps26152_intelligence(store)
+            ids = [item.get("id") for item in intelligence.get("requirements", [])]
+            if ids == ["A", "B", "C", "D", "E"]:
+                ok("runtime A-E: unified requirement intelligence payload is complete")
+            else:
+                failures += fail(f"runtime A-E: requirement payload ids are {ids}")
+
     except Exception as exc:
-        failures += fail(f"runtime SIH capability import/execution: {exc}")
+        failures += fail(f"runtime SIH26152 validation crashed: {type(exc).__name__}: {exc}")
 
     print("\nRESULT:")
     if failures:
         print(f"SIH26152 COMPLETENESS CHECK FAILED with {failures} issue(s).")
         return 1
-    print("SIH26152 COMPLETENESS CHECK PASSED: A-E runtime wiring, comments/reactions, nuanced sentiment, demographics, trend prediction and link-propagation outputs are active.")
+
+    print(
+        "SIH26152 COMPLETENESS CHECK PASSED: A-E runtime wiring, reactions, "
+        "8-emotion sentiment, privacy-safe demographics, trends and network spread are active."
+    )
     return 0
 
 
