@@ -87,6 +87,8 @@ async def _fetch_oembed(client: httpx.AsyncClient, post_url: str) -> dict:
                     attempts.append(f"{urlparse(endpoint).netloc}: invalid JSON")
                     continue
                 if payload.get("html"):
+                    payload["_nexus_endpoint"] = endpoint
+                    payload["_nexus_candidate_url"] = candidate
                     return payload
                 attempts.append(f"{urlparse(endpoint).netloc}: empty embed")
                 continue
@@ -101,27 +103,47 @@ async def _fetch_oembed(client: httpx.AsyncClient, post_url: str) -> dict:
     )
 
 
+def _readable_oembed_text(blockquote: BeautifulSoup, author: str) -> tuple[str, bool, list[str]]:
+    """Return usable text without rejecting GIF/image/video-only public posts."""
+    paragraph = blockquote.find("p")
+    text = paragraph.get_text(" ", strip=True) if paragraph else blockquote.get_text(" ", strip=True)
+    text = " ".join(text.split()).strip()
+    if text:
+        return text, False, []
+
+    alt_candidates: list[str] = []
+    for image in blockquote.find_all("img"):
+        alt = str(image.get("alt") or "").strip()
+        if alt and alt.lower() not in {"image", "photo", "gif"} and alt not in alt_candidates:
+            alt_candidates.append(alt)
+    if alt_candidates:
+        return " · ".join(alt_candidates[:3]), True, alt_candidates[:3]
+
+    # Some X posts are literally media-only. Rejecting them made valid public
+    # GIF/video posts disappear from NEXUS. Keep the evidence and disclose that
+    # X supplied an embed but no textual caption; downstream NLP should therefore
+    # treat the placeholder as low-information rather than claimed post wording.
+    return f"[Media-only X post by {author}; no readable caption returned by X oEmbed]", True, []
+
+
 async def _one(client: httpx.AsyncClient, post_url: str, run_id: str) -> SocialEventIn:
     payload = await _fetch_oembed(client, post_url)
     html = str(payload.get("html") or "")
     soup = BeautifulSoup(html, "html.parser")
     blockquote = soup.find("blockquote") or soup
-    paragraph = blockquote.find("p")
-    text = paragraph.get_text(" ", strip=True) if paragraph else blockquote.get_text(" ", strip=True)
-    if not text.strip():
-        raise ConnectorError("X oEmbed returned an embed without readable Post text.", "DEGRADED")
 
     author = str(payload.get("author_name") or "").strip() or "X author"
     author_url = str(payload.get("author_url") or "").strip()
     username_match = re.search(r"(?:x\.com|twitter\.com)/([^/?#]+)", author_url, re.I)
     username = username_match.group(1) if username_match else author
+    text, media_only, media_alt_text = _readable_oembed_text(blockquote, author)
     hashtags, mentions, urls = _extract_text_entities(text)
     status_id = _status_id(post_url)
 
     return SocialEventIn(
         platform="x",
         source_event_id=f"oembed:{status_id}",
-        event_type="public_oembed_post",
+        event_type="public_oembed_media_post" if media_only else "public_oembed_post",
         author_platform_id=username,
         author_display=author,
         text=text,
@@ -141,6 +163,14 @@ async def _one(client: httpx.AsyncClient, post_url: str, run_id: str) -> SocialE
             "collection_scope": "official_x_oembed_public_post",
             "free_fallback": "official_oembed",
             "oembed_compatibility": "publish_x_then_publish_twitter",
+            "oembed_endpoint_used": payload.get("_nexus_endpoint"),
+            "oembed_candidate_url": payload.get("_nexus_candidate_url"),
+            "media_only": media_only,
+            "media_alt_text": media_alt_text,
+            "content_disclosure": (
+                "X oEmbed exposed the public embed but no readable caption; NEXUS retained a disclosed media-only placeholder."
+                if media_only else "Post text parsed from X oEmbed."
+            ),
         },
         source_mode="LIVE",
         connector_run_id=run_id,
@@ -156,7 +186,7 @@ async def x_resilient_oembed_or_bridge(query: str, target: str = "", limit: int 
     async with httpx.AsyncClient(
         timeout=20,
         follow_redirects=True,
-        headers={"User-Agent": "Mozilla/5.0 NEXUS-SIH26152/0.6"},
+        headers={"User-Agent": "Mozilla/5.0 NEXUS-SIH26152/0.7"},
     ) as client:
         results = await asyncio.gather(*(_one(client, url, run_id) for url in post_urls[:limit]), return_exceptions=True)
 
@@ -170,7 +200,9 @@ async def x_resilient_oembed_or_bridge(query: str, target: str = "", limit: int 
 
     if not output:
         raise ConnectorError(
-            "No supplied public X Post URL could be fetched. " + (" | ".join(errors[:2]) if errors else "Check that the URL is a public /status/ link."),
+            "No supplied public X Post URL could be fetched automatically. X may be refusing embed access for that specific post. "
+            "Use NEXUS Manual X Conversation Import to paste the public post/replies as disclosed IMPORT evidence. "
+            + (" | ".join(errors[:2]) if errors else "Check that the URL is a public /status/ link."),
             "PERMISSION_REQUIRED",
         )
     return output
