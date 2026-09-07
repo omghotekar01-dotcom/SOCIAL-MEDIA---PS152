@@ -13,6 +13,7 @@ import './command-center.css';
 import './responsive-pro.css';
 import './resilience.css';
 import './brand-polish.css';
+import './product-polish.css';
 
 function NexusRuntime() {
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
