@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0.."
 
 echo ============================================================
-echo  NEXUS - SIH26152 DEMO STARTER v0.4.1
+echo  NEXUS - SIH26152 DEMO STARTER v0.4.2
 echo ============================================================
 
 where python >nul 2>&1
@@ -91,6 +91,13 @@ if errorlevel 1 (
   goto :fail
 )
 
+echo [4/7] Verifying Timeline and Narrative graph contracts...
+"%PY%" scripts\preflight_charts.py
+if errorlevel 1 (
+  echo [ERROR] Timeline/Narrative graph visibility contract failed.
+  goto :fail
+)
+
 echo [5/7] Starting FastAPI analytics service...
 start "NEXUS FastAPI" /D "%CD%\backend-ai" "%CD%\.venv\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
@@ -120,6 +127,8 @@ echo  Evidence API: http://127.0.0.1:8000/api/certificates
 echo.
 echo  Core analysis: A-E SIH26152 runtime + 8-emotion NLP + stance
 echo                 + sarcasm + demographics + trends + link spread.
+echo  Charts: Timeline chronology + 8-emotion/stance movement +
+echo          Narrative propagation graph are startup-gated.
 echo  Seed data is fictional and explicitly labelled REPLAY.
 echo  PROTOTYPE SOURCES: simple Telegram + YouTube + public-source controls.
 echo  PS26152 CORE: judge-facing 5/5 original requirement evidence view.
