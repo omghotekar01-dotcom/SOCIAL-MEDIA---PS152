@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ArrowDownUp, ExternalLink, Filter, Hash, Layers3, MessageCircle, Play, Radio, Search, ShieldCheck, UserRound } from 'lucide-react';
 import type { SocialEvent } from './api';
+import ReactionIntelligence from './ReactionIntelligence';
 
 type Props = {
   events: SocialEvent[];
@@ -72,6 +73,7 @@ function numberValue(value: number | string | null | undefined) {
 
 function connectorLabel(event: SocialEvent) {
   if (event.public_profile?.free_fallback === 'official_oembed') return 'official_x_oembed';
+  if (event.public_profile?.evidence_entry_method === 'manual_transcription') return 'analyst_manual_x_import';
   return String(event.public_profile?.connector || 'unknown');
 }
 
@@ -209,14 +211,14 @@ export default function PostExplorer({ events, selectedId, onSelect }: Props) {
             </div>
           </aside>
 
-          <PostDetail event={selected} />
+          <PostDetail event={selected} events={events} />
         </div>
       )}
     </div>
   );
 }
 
-function PostDetail({ event: selected }: { event: SocialEvent }) {
+function PostDetail({ event: selected, events }: { event: SocialEvent; events: SocialEvent[] }) {
   const embed = youtubeEmbed(selected);
   const xDoc = xEmbedDoc(selected);
   const thumbnail = thumbnailUrl(selected);
@@ -260,6 +262,10 @@ function PostDetail({ event: selected }: { event: SocialEvent }) {
 
         <div className="post-text-full">{selected.text}</div>
 
+        {Boolean(selected.public_profile?.content_disclosure) && (
+          <div className="post-content-disclosure"><ShieldCheck size={14} />{String(selected.public_profile.content_disclosure)}</div>
+        )}
+
         {(selected.hashtags.length > 0 || selected.mentions.length > 0) && (
           <div className="post-tag-area">
             {selected.hashtags.map((tag) => <span key={`h-${tag}`}><Hash size={12} />{tag}</span>)}
@@ -301,6 +307,8 @@ function PostDetail({ event: selected }: { event: SocialEvent }) {
           <div className="post-fact"><span>Inference</span><strong>{selected.inference_method || '—'}</strong></div>
         </section>
       </div>
+
+      <ReactionIntelligence event={selected} events={events} />
 
       <details className="post-raw-card">
         <summary>Show raw public metadata & extracted URLs</summary>
