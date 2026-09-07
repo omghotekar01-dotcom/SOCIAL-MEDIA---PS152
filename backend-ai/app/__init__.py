@@ -7,9 +7,10 @@ older internal functions before FastAPI/collector modules import them.
 from . import analytics as analytics
 from . import connectors as connectors
 from . import free_connectors as free_connectors
-from .advanced_analytics import advanced_demographics, advanced_infer_text, advanced_overview, advanced_trend_metrics
+from .advanced_analytics import advanced_demographics, advanced_infer_text, advanced_trend_metrics
 from .advanced_collector import AdvancedCollectorManager, AdvancedCollectorStartRequest
 from .complete_alerts import complete_alerts
+from .complete_overview import complete_overview
 from .conversation_connectors import bluesky_search_with_replies, mastodon_search_with_replies, reddit_search_with_comments
 from .priority_free_connectors import telegram_monitored_search
 from .resilient_connectors import instagram_resilient_profile, mastodon_resilient_search, reddit_resilient_search
@@ -26,7 +27,7 @@ x_oembed_or_bridge = x_resilient_oembed_or_bridge
 analytics.infer_text = advanced_infer_text
 analytics.demographics = advanced_demographics
 analytics.trend_metrics = advanced_trend_metrics
-analytics.overview = advanced_overview
+analytics.overview = complete_overview
 
 # Stable chart/graph behavior plus reaction-aware explainable attention alerts.
 analytics.alerts = complete_alerts
