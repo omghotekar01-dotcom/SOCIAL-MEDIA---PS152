@@ -146,11 +146,9 @@ def _within_page_cap(page_number: int, configured_cap: int) -> bool:
 async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialEventIn]:
     """Official YouTube Data API v3 video + exhaustive comment/reply ingestion.
 
-    For an exact public video URL/id, ``max_comments_per_video=0`` means collect
-    every public top-level comment and reply that YouTube exposes, following
-    ``nextPageToken`` until exhaustion. Optional environment page ceilings remain
-    available for operators who need to protect a production quota, but the SIH
-    prototype defaults those ceilings to zero (provider-bounded/exhaustive).
+    ``max_comments_per_video=0`` explicitly requests provider-bounded exhaustive
+    collection and therefore overrides stale positive count caps in an old local
+    .env. Positive request values can still be constrained by an operator cap.
     """
     key = SETTINGS.youtube_api_key
     if not key:
@@ -164,11 +162,10 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
     max_videos = min(request.max_videos, SETTINGS.youtube_max_videos_per_run, 10)
     requested_comment_cap = int(request.max_comments_per_video)
     configured_comment_cap = int(SETTINGS.youtube_max_comments_per_video)
-    if configured_comment_cap > 0:
-        if requested_comment_cap <= 0:
-            requested_comment_cap = configured_comment_cap
-        else:
-            requested_comment_cap = min(requested_comment_cap, configured_comment_cap)
+    # Explicit 0 means exhaustive and wins over a stale YOUTUBE_MAX_COMMENTS_PER_VIDEO
+    # value left from older project versions. Positive requests remain cap-aware.
+    if requested_comment_cap > 0 and configured_comment_cap > 0:
+        requested_comment_cap = min(requested_comment_cap, configured_comment_cap)
 
     output: list[SocialEventIn] = []
 
@@ -472,7 +469,9 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
             root_profile["collection_complete"] = collection_complete
             root_profile["collection_stop_reason"] = stop_reason
             root_profile["coverage_ratio"] = (
-                round(min(1.0, captured / reported_comments), 4) if reported_comments > 0 else (1.0 if captured == 0 else None)
+                round(min(1.0, captured / reported_comments), 4)
+                if reported_comments > 0
+                else (1.0 if captured == 0 else None)
             )
 
             if root_profile.get("comments_state") == "disabled":
