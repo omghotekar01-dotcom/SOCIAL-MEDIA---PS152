@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from .config import get_settings
 
 
 Platform = Literal[
@@ -127,7 +128,8 @@ class WorkspaceSearchRequest(BaseModel):
 
     @model_validator(mode="after")
     def attach_monitored_telegram_query(self):
-        raw = (self.telegram_channel or os.getenv("TELEGRAM_PUBLIC_CHANNELS", "")).strip()
+        settings = get_settings()
+        raw = (self.telegram_channel or settings.telegram_public_channels or "").strip()
         if raw:
             raw = raw.split("||", 1)[0].strip()
             self.telegram_channel = f"{raw}||{self.query}"
