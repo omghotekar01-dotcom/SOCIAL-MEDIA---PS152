@@ -154,9 +154,6 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
         if direct_video_id:
             candidate_ids = [direct_video_id]
         else:
-            # Search more candidates than we finally ingest. Recent-only search
-            # frequently selects Shorts/new uploads with comments disabled or zero
-            # comments. The details call below lets us prefer comment-rich results.
             candidate_count = min(25, max(8, max_videos * 5))
             search_resp = await client.get(
                 "https://www.googleapis.com/youtube/v3/search",
@@ -191,9 +188,6 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
         if not details:
             raise ConnectorError("YouTube returned no accessible public videos for this input.", "DEGRADED")
 
-        # Prefer videos that are public and have audience discussion. Preserve
-        # search relevance as a tiebreaker rather than selecting random popular
-        # content.
         details = [item for item in details if str((item.get("status") or {}).get("privacyStatus") or "public") == "public"]
         details.sort(
             key=lambda item: (
@@ -249,6 +243,10 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
                 source_mode="LIVE",
                 connector_run_id=run_id,
             )
+            # Pydantic validates/copies mutable inputs. Rebind the working profile
+            # to the model-owned dictionary so comment availability/capture state
+            # written below is reflected in the event returned to callers.
+            root_profile = root.public_profile
             output.append(root)
 
             comments_resp = await client.get(
@@ -330,8 +328,6 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
                     and total_reply_count > len(inline_replies)
                     and extra_reply_fetches < 5
                 ):
-                    # commentThreads may return only a subset of replies. Google's
-                    # official docs require comments.list(parentId=...) for the rest.
                     extra_reply_fetches += 1
                     replies_resp = await client.get(
                         "https://www.googleapis.com/youtube/v3/comments",
