@@ -44,8 +44,8 @@ def health() -> tuple[bool, str]:
 
 
 def status(label: str, ok: bool, detail: str) -> None:
-    tag = "READY" if ok else "NEEDS SETUP"
-    print(f"[{tag:11}] {label:<21} {detail}")
+    tag = "READY" if ok else "OPTIONAL/SETUP"
+    print(f"[{tag:14}] {label:<24} {detail}")
 
 
 def main() -> int:
@@ -54,91 +54,58 @@ def main() -> int:
     print("No secret values are printed. You can send this output for debugging.\n")
 
     if not ENV_FILE.exists():
-        print("[INFO] .env is missing; safe built-in demo defaults are still available.\n")
+        print("[INFO] .env is missing; built-in zero-key demo defaults are still available.\n")
 
     backend_ok, backend_detail = health()
     status("Backend", backend_ok, backend_detail)
     status("Python", sys.version_info >= (3, 11), sys.version.split()[0])
     status("Node", shutil.which("node") is not None, shutil.which("node") or "not found")
 
-    print("\nPRIMARY SIH SOURCE READINESS")
+    print("\nPRIMARY / CONTROLLED SOURCES")
     raw_channels = env.get("TELEGRAM_PUBLIC_CHANNELS", "").strip() or "NexusSIHDemo"
     channels = [item.strip().lstrip("@").strip("/") for item in raw_channels.replace(";", ",").split(",") if item.strip()]
-    status(
-        "Telegram monitored",
-        bool(channels),
-        f"{len(channels)} public channel(s): {', '.join(channels[:5])} · automatic Fresh Search" if channels else "no monitored channels configured",
-    )
-    status(
-        "Telegram public manual",
-        True,
-        "zero-key public-preview path available for a supplied public channel username",
-    )
-    status(
-        "Telegram Bot API",
-        present(env, "TELEGRAM_BOT_TOKEN"),
-        "bot token configured for authorized live channel/chat updates" if present(env, "TELEGRAM_BOT_TOKEN") else "optional; zero-key monitored-channel mode already works for the SIH demo",
-    )
-    status(
-        "X public URL oEmbed",
-        True,
-        "FREE official no-auth path ready; paste public X Post URL(s) into Free Source Lab",
-    )
-    status(
-        "X official search",
-        present(env, "X_BEARER_TOKEN"),
-        "X_BEARER_TOKEN configured" if present(env, "X_BEARER_TOKEN") else "optional pay-per-use search not configured; free global X search is not claimed",
-    )
-    status(
-        "X RSS/Atom bridge",
-        present(env, "X_PUBLIC_RSS_URL_TEMPLATE"),
-        "permitted bridge template configured" if present(env, "X_PUBLIC_RSS_URL_TEMPLATE") else "optional; explicit X Post URL oEmbed still works without it",
-    )
+    status("Telegram monitored", bool(channels), f"{len(channels)} public channel(s): {', '.join(channels[:5])} · automatic query filtering")
+    status("Telegram public manual", True, "zero-key public-preview path implemented for supplied public channels")
+    status("Telegram Bot API", present(env, "TELEGRAM_BOT_TOKEN"), "authorized bot live updates configured" if present(env, "TELEGRAM_BOT_TOKEN") else "optional; public monitored-channel path still available")
 
-    print("\nSECONDARY SOURCE READINESS")
-    status(
-        "YouTube zero-key",
-        module_available("yt_dlp"),
-        "yt-dlp module installed" if module_available("yt_dlp") else "backend dependencies need yt-dlp",
-    )
-    status(
-        "YouTube official",
-        present(env, "YOUTUBE_API_KEY"),
-        "YOUTUBE_API_KEY configured" if present(env, "YOUTUBE_API_KEY") else "optional: add YOUTUBE_API_KEY",
-    )
-    status(
-        "Instagram public",
-        module_available("instaloader"),
-        "Instaloader fallback installed; runtime access still depends on Instagram" if module_available("instaloader") else "backend dependencies need Instaloader",
-    )
+    status("X public URL oEmbed", True, "official no-auth explicit public Post URL path implemented")
+    status("X official search", present(env, "X_BEARER_TOKEN"), "authorized recent-search configured" if present(env, "X_BEARER_TOKEN") else "requires X developer access/credits; free global keyword search is not claimed")
+    status("X permitted bridge", present(env, "X_PUBLIC_RSS_URL_TEMPLATE"), "configured RSS/Atom bridge available" if present(env, "X_PUBLIC_RSS_URL_TEMPLATE") else "optional; X URL oEmbed remains available")
+
+    print("\nSEARCH / DISCOVERY SOURCES")
+    status("YouTube zero-key", module_available("yt_dlp"), "yt-dlp public video metadata installed" if module_available("yt_dlp") else "install backend dependencies")
+    status("YouTube Data API", present(env, "YOUTUBE_API_KEY"), "official video/comment path configured" if present(env, "YOUTUBE_API_KEY") else "optional; zero-key mode still available")
+    status("Bluesky", True, "zero-key public AT Protocol search implemented; runtime network dependent")
+
+    reddit_oauth = present(env, "REDDIT_CLIENT_ID") and present(env, "REDDIT_CLIENT_SECRET")
+    status("Reddit public", True, "low-volume public search attempted where permitted")
+    status("Reddit authorized", reddit_oauth, "approved OAuth credentials configured; NEXUS tries this before public fallback" if reddit_oauth else "optional; provider/network policy can restrict anonymous Reddit access")
+
+    preferred_mastodon = env.get("MASTODON_BASE_URL", "").strip() or "https://mastodon.social"
+    fallback_mastodon = env.get("MASTODON_FALLBACK_BASE_URLS", "").strip() or "https://mastodon.online,https://fosstodon.org"
+    fallback_count = len([item for item in fallback_mastodon.replace(";", ",").split(",") if item.strip()])
+    status("Mastodon resilient", True, f"preferred {preferred_mastodon} + {fallback_count} configured fallback instance(s)")
+
+    print("\nMETA / PROFILE SOURCES")
+    instagram_bridge = present(env, "INSTAGRAM_PUBLIC_RSS_URL_TEMPLATE")
+    status("Instagram bridge", instagram_bridge, "permitted public bridge configured and tried first" if instagram_bridge else "optional")
+    status("Instagram public", module_available("instaloader"), "public-profile fallback installed; provider restrictions still apply" if module_available("instaloader") else "install backend dependencies")
     ig_official = present(env, "META_ACCESS_TOKEN") and present(env, "META_INSTAGRAM_ACCOUNT_ID")
-    status(
-        "Instagram Meta",
-        ig_official,
-        "Meta token + Instagram account ID configured" if ig_official else "set META_ACCESS_TOKEN + META_INSTAGRAM_ACCOUNT_ID after Meta authorization",
-    )
+    status("Instagram Meta", ig_official, "authorized Meta account path configured" if ig_official else "requires Meta authorization + Instagram professional account ID")
     fb_official = present(env, "META_ACCESS_TOKEN") and present(env, "META_FACEBOOK_PAGE_ID")
-    status(
-        "Facebook Meta",
-        fb_official,
-        "Meta token + Facebook Page ID configured" if fb_official else "optional: set META_ACCESS_TOKEN + META_FACEBOOK_PAGE_ID",
-    )
-    status("Bluesky", True, "zero-key public AT Protocol path implemented; network dependent")
-    status("Reddit", True, "public low-volume path implemented; may be 403/429 depending on network")
-    status(
-        "Mastodon",
-        present(env, "MASTODON_BASE_URL"),
-        f"instance configured: {env.get('MASTODON_BASE_URL', '')}" if present(env, "MASTODON_BASE_URL") else "default instance is mastodon.social",
-    )
+    status("Facebook Meta", fb_official, "authorized Facebook Page path configured" if fb_official else "requires Meta authorization + Page ID")
+
+    print("\nALWAYS AVAILABLE FALLBACK")
+    status("IMPORT / REPLAY", True, "deterministic import/replay works offline and remains explicitly labelled")
 
     print("\nWHAT TO SEND FOR DEBUGGING")
     print("1. This doctor output.")
-    print("2. Screenshot of Posts / Explorer and Connection Center.")
-    print("3. The exact SEARCH QUERY you tested.")
-    print("4. Telegram: public channel usernames you want monitored (public names are safe to share).")
-    print("5. X: one or more PUBLIC Post URLs you tested (public URLs are safe to share).")
-    print("6. API-provider error text/screenshots with all tokens and keys hidden.")
-    print("7. Never send bearer tokens, bot tokens, API secrets, passwords, cookies, session files, or .env contents.")
+    print("2. The PRE-FLIGHT result block.")
+    print("3. Screenshot of the affected tab / Social Source Lab.")
+    print("4. Exact public search query tested.")
+    print("5. Public Telegram usernames / public X Post URLs are safe to share.")
+    print("6. Provider error messages are safe after hiding tokens/keys.")
+    print("7. Never send bearer tokens, bot tokens, client secrets, passwords, cookies, session files, or .env contents.")
 
     if not backend_ok:
         print("\nNEXT: start NEXUS with scripts\\start_demo.bat, then run this doctor again.")
