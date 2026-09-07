@@ -27,7 +27,7 @@ def test_eight_emotion_contract_is_stable():
 
 
 def test_stance_and_sarcasm_are_separate_dimensions():
-    result = analyze_text("Amazing work guys, another brilliant decision. Yeah right, totally unacceptable 🙃")
+    result = analyze_text("Amazing work guys, another brilliant decision. Totally unacceptable 🙃")
     assert result["stance_label"] == "against"
     assert result["sarcasm_probability"] >= 0.5
     assert result["primary_emotion"] in EXPECTED_EMOTIONS
