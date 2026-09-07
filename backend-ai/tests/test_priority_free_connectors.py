@@ -40,6 +40,18 @@ def test_workspace_explicit_telegram_target_is_bound_to_query():
     assert request.telegram_channel == "my_public_channel||RiverLink"
 
 
+def test_workspace_defaults_to_nexus_sih_demo_channel():
+    request = WorkspaceSearchRequest(
+        query="RiverLink",
+        telegram_channel=None,
+        enable_youtube=False,
+        enable_bluesky=False,
+        enable_reddit=False,
+        enable_mastodon=False,
+    )
+    assert request.telegram_channel == "NexusSIHDemo||RiverLink"
+
+
 def test_x_public_post_urls_are_detected_without_accepting_random_urls():
     value = "https://x.com/example/status/1234567890 https://twitter.com/other/status/987654321"
     assert _extract_x_urls(value) == [
