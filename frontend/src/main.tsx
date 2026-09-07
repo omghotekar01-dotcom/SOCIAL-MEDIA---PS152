@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import AppErrorBoundary from './AppErrorBoundary';
 import ConnectionCenter from './ConnectionCenter';
 import FreeConnectorPanel from './FreeConnectorPanel';
 import ThemeController from './ThemeController';
@@ -14,8 +15,10 @@ import './responsive-pro.css';
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeController />
-    <App />
-    <ConnectionCenter />
-    <FreeConnectorPanel />
+    <AppErrorBoundary>
+      <App />
+      <ConnectionCenter />
+      <FreeConnectorPanel />
+    </AppErrorBoundary>
   </React.StrictMode>,
 );
