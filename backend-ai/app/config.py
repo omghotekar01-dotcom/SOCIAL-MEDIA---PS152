@@ -42,7 +42,7 @@ class Settings(BaseSettings):
 
     youtube_api_key: str = ""
     youtube_max_videos_per_run: int = 5
-    youtube_max_comments_per_video: int = 30
+    youtube_max_comments_per_video: int = 100
 
     meta_graph_version: str = "v23.0"
     meta_access_token: str = ""
