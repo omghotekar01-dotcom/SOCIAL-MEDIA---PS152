@@ -8,20 +8,19 @@ from . import analytics as analytics
 from . import connectors as connectors
 from . import free_connectors as free_connectors
 from .priority_free_connectors import telegram_monitored_search, x_oembed_or_bridge
+from .resilient_connectors import instagram_resilient_profile, mastodon_resilient_search, reddit_resilient_search
 from .stable_alerts import stable_alerts
 from .youtube_official import youtube_official_search
 
-# Make alert identifiers replay-stable so an alert returned by `/api/alerts` can
-# be resolved by `/api/certificates/alert/{id}` on a later independent request.
+# Replay-stable alert identifiers.
 analytics.alerts = stable_alerts
 
-# Preserve the connector API while using the video-first YouTube implementation
-# everywhere, including continuous collection.
+# Video-first official YouTube implementation everywhere, including collector runs.
 connectors.youtube_search = youtube_official_search
 
-# Keep the public connector route signatures stable while upgrading behavior:
-# - Telegram accepts a monitored-channel specification with optional workspace query.
-# - X accepts explicit public Post URLs through official unauthenticated oEmbed,
-#   falling back to the configured permitted RSS/Atom bridge when no URL is given.
+# Preserve route signatures while strengthening public/fallback behavior.
 free_connectors.telegram_public_channel = telegram_monitored_search
 free_connectors.x_public_bridge = x_oembed_or_bridge
+free_connectors.reddit_public_search = reddit_resilient_search
+free_connectors.mastodon_search = mastodon_resilient_search
+free_connectors.instagram_public_profile = instagram_resilient_profile
