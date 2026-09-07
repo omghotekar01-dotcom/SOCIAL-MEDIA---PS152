@@ -89,6 +89,37 @@ class XSearchRequest(BaseModel):
     max_results: int = Field(default=20, ge=10, le=100)
 
 
+class XManualReply(BaseModel):
+    text: str = Field(min_length=1, max_length=5000)
+    author: str | None = Field(default=None, max_length=120)
+    created_at: datetime | None = None
+    likes: int = Field(default=0, ge=0)
+
+
+class XManualConversationRequest(BaseModel):
+    """Analyst-provided X evidence when API/oEmbed cannot expose a thread.
+
+    This path is deliberately IMPORT, never LIVE. The original URL is retained
+    so judges/analysts can distinguish provider-fetched evidence from manually
+    transcribed public evidence.
+    """
+
+    url: str = Field(min_length=1, max_length=4000)
+    post_text: str = Field(min_length=1, max_length=10000)
+    author: str | None = Field(default=None, max_length=120)
+    created_at: datetime | None = None
+    replies: list[XManualReply] = Field(default_factory=list, max_length=250)
+
+    @field_validator("url")
+    @classmethod
+    def validate_x_url(cls, value: str) -> str:
+        clean = value.strip()
+        import re
+        if not re.search(r"https?://(?:(?:www|mobile)\.)?(?:x\.com|twitter\.com)/[A-Za-z0-9_]+/status/\d+", clean, re.I):
+            raise ValueError("Enter a valid public X/Twitter /status/ URL")
+        return clean
+
+
 class TelegramPollRequest(BaseModel):
     max_updates: int = Field(default=50, ge=1, le=100)
 
