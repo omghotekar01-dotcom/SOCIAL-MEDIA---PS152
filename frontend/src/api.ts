@@ -212,10 +212,35 @@ export interface CollectorStatus {
   note: string;
 }
 
+type IngestResult = {
+  received?: number;
+  inserted: number;
+  duplicates?: number;
+  total_events: number;
+  connector?: string;
+  platform?: string;
+  source_mode?: string;
+};
+
+type SearchOptions = {
+  reset?: boolean;
+  limitPerSource?: number;
+  telegramChannel?: string;
+  instagramProfile?: string;
+};
+
 const DIRECT_API = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 const JAVA_API = import.meta.env.VITE_JAVA_GATEWAY_URL || 'http://127.0.0.1:8080';
 const USE_GATEWAY = String(import.meta.env.VITE_USE_JAVA_GATEWAY || 'false').toLowerCase() === 'true';
 export const API_BASE = USE_GATEWAY ? `${JAVA_API}/api/gateway` : DIRECT_API;
+
+const YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+const YOUTUBE_URL_RE = /(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
+
+export function isExactYouTubeTarget(value: string): boolean {
+  const clean = value.trim();
+  return YOUTUBE_ID_RE.test(clean) || YOUTUBE_URL_RE.test(clean);
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -244,6 +269,121 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function officialYouTubeSearch(query: string, maxVideos: number, maxComments: number): Promise<IngestResult> {
+  return request<IngestResult>('/api/connectors/youtube/search', {
+    method: 'POST',
+    body: JSON.stringify({
+      query,
+      max_videos: maxVideos,
+      max_comments_per_video: maxComments,
+    }),
+  });
+}
+
+async function smartWorkspaceSearch(query: string, options?: SearchOptions): Promise<WorkspaceSearchResponse> {
+  const clean = query.trim();
+  const reset = options?.reset ?? true;
+  const limit = options?.limitPerSource ?? 15;
+
+  // Exact YouTube URLs/video IDs are conversation targets, not cross-platform
+  // keywords. Route directly to the official Data API so Fresh Search collects
+  // the root video + public comments + nested replies instead of creating a
+  // zero-key `free:<video_id>` metadata-only record.
+  if (isExactYouTubeTarget(clean)) {
+    if (reset) {
+      await request<{ status: string; total_events: number }>('/api/workspace/reset', {
+        method: 'POST',
+        body: '{}',
+      });
+    }
+
+    const youtube = await officialYouTubeSearch(clean, 1, 100);
+    const received = Number(youtube.received ?? youtube.inserted ?? 0);
+    return {
+      received,
+      inserted: Number(youtube.inserted || 0),
+      duplicates: Number(youtube.duplicates || 0),
+      total_events: Number(youtube.total_events || 0),
+      query: clean,
+      search_session_id: `youtube-direct-${Date.now()}`,
+      reset,
+      message: 'Exact YouTube conversation loaded through YouTube Data API v3 with public comments/replies where available.',
+      sources: {
+        youtube: {
+          state: 'OK',
+          received,
+          connector: 'youtube_data_api_v3',
+        },
+      },
+    };
+  }
+
+  // For normal topic search, use the official YouTube connector whenever the
+  // backend reports that the API key is ready. Other public sources remain
+  // independent so a YouTube failure never destroys the rest of the workspace.
+  let youtubeOfficialReady = false;
+  try {
+    const status = await request<{ connectors: ConnectorStatus[] }>('/api/connectors/status');
+    const youtube = status.connectors.find((item) => item.platform === 'youtube');
+    youtubeOfficialReady = !!youtube && (youtube.state === 'READY' || youtube.state === 'LIVE');
+  } catch {
+    // If status discovery itself fails, preserve the existing backend workspace
+    // path rather than blocking all source collection.
+  }
+
+  const base = await request<WorkspaceSearchResponse>('/api/search/workspace', {
+    method: 'POST',
+    body: JSON.stringify({
+      query: clean,
+      reset,
+      limit_per_source: limit,
+      enable_youtube: !youtubeOfficialReady,
+      enable_bluesky: true,
+      enable_reddit: true,
+      enable_mastodon: true,
+      telegram_channel: options?.telegramChannel || null,
+      instagram_profile: options?.instagramProfile || null,
+    }),
+  });
+
+  if (!youtubeOfficialReady) return base;
+
+  try {
+    const youtube = await officialYouTubeSearch(clean, 3, 100);
+    const received = Number(youtube.received ?? youtube.inserted ?? 0);
+    return {
+      ...base,
+      received: base.received + received,
+      inserted: base.inserted + Number(youtube.inserted || 0),
+      duplicates: base.duplicates + Number(youtube.duplicates || 0),
+      total_events: Number(youtube.total_events || base.total_events),
+      message: `${base.message} Official YouTube video/comment/reply evidence appended.`,
+      sources: {
+        ...base.sources,
+        youtube: {
+          state: 'OK',
+          received,
+          connector: 'youtube_data_api_v3',
+        },
+      },
+    };
+  } catch (error) {
+    return {
+      ...base,
+      sources: {
+        ...base.sources,
+        youtube: {
+          state: 'ERROR',
+          received: 0,
+          connector: 'youtube_data_api_v3',
+          detail: error instanceof Error ? error.message : 'Official YouTube collection failed.',
+        },
+      },
+      message: `${base.message} Official YouTube collection reported an error; see source status.`,
+    };
+  }
+}
+
 export const api = {
   health: () => request<{ status: string }>('/health'),
   connectorStatus: () => request<{ connectors: ConnectorStatus[] }>('/api/connectors/status'),
@@ -259,40 +399,17 @@ export const api = {
   resetWorkspace: () => request<{ status: string; total_events: number }>('/api/workspace/reset', {
     method: 'POST', body: '{}',
   }),
-  searchWorkspace: (
-    query: string,
-    options?: {
-      reset?: boolean;
-      limitPerSource?: number;
-      telegramChannel?: string;
-      instagramProfile?: string;
-    },
-  ) => request<WorkspaceSearchResponse>('/api/search/workspace', {
-    method: 'POST',
-    body: JSON.stringify({
-      query,
-      reset: options?.reset ?? true,
-      limit_per_source: options?.limitPerSource ?? 15,
-      enable_youtube: true,
-      enable_bluesky: true,
-      enable_reddit: true,
-      enable_mastodon: true,
-      telegram_channel: options?.telegramChannel || null,
-      instagram_profile: options?.instagramProfile || null,
-    }),
-  }),
+  searchWorkspace: smartWorkspaceSearch,
   seedDemo: () => request<{ inserted: number; total_events: number; message: string }>('/api/demo/seed', {
     method: 'POST', body: JSON.stringify({ reset: true }),
   }),
   pollTelegram: () => request<{ inserted: number; total_events: number }>('/api/connectors/telegram/poll', {
-    method: 'POST', body: JSON.stringify({ max_updates: 50 }),
+    method: 'POST', body: JSON.stringify({ max_updates: 100 }),
   }),
   searchX: (query: string) => request<{ inserted: number; total_events: number }>('/api/connectors/x/search', {
     method: 'POST', body: JSON.stringify({ query, max_results: 20 }),
   }),
-  searchYouTube: (query: string) => request<{ inserted: number; total_events: number }>('/api/connectors/youtube/search', {
-    method: 'POST', body: JSON.stringify({ query, max_videos: 3, max_comments_per_video: 20 }),
-  }),
+  searchYouTube: (query: string) => officialYouTubeSearch(query, isExactYouTubeTarget(query) ? 1 : 3, 100),
   syncMeta: (source: 'instagram' | 'facebook') => request<{ inserted: number; total_events: number }>(
     '/api/connectors/meta/sync', { method: 'POST', body: JSON.stringify({ source, limit: 25 }) },
   ),
