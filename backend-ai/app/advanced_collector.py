@@ -172,8 +172,8 @@ class AdvancedCollectorManager:
         if config.enable_youtube:
             jobs.append((
                 "youtube_official",
-                "youtube_data_api_v3",
-                connectors.youtube_search(YouTubeSearchRequest(query=config.query, max_videos=2, max_comments_per_video=15)),
+                "youtube_data_api_v3_exhaustive",
+                connectors.youtube_search(YouTubeSearchRequest(query=config.query, max_videos=2, max_comments_per_video=0)),
             ))
         if config.enable_instagram_authorized:
             jobs.append(("instagram", "meta_graph_authorized", connectors.meta_sync(MetaSyncRequest(source="instagram", limit=20))))
