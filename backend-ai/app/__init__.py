@@ -7,14 +7,16 @@ older internal functions before FastAPI/collector modules import them.
 from . import analytics as analytics
 from . import connectors as connectors
 from . import free_connectors as free_connectors
+from .scalable_clusters import scalable_assign_clusters
 from .telegram_rich import telegram_rich_poll
 from .youtube_official import youtube_official_search
 
-# IMPORTANT: patch connector functions before importing collector modules. Those
-# modules bind telegram_poll/youtube_search with `from .connectors import ...`;
-# patching afterwards would leave continuous collection on the legacy functions.
+# IMPORTANT: patch connector/cluster functions before importing collector modules.
+# Those modules bind functions with `from ... import ...`; patching afterwards
+# would leave continuous collection on legacy implementations.
 connectors.telegram_poll = telegram_rich_poll
 connectors.youtube_search = youtube_official_search
+analytics.assign_clusters = scalable_assign_clusters
 
 from .advanced_analytics import advanced_demographics, advanced_infer_text, advanced_trend_metrics
 from .advanced_collector import AdvancedCollectorManager, AdvancedCollectorStartRequest
@@ -42,8 +44,6 @@ analytics.overview = complete_overview
 analytics.seed_demo_events = complete_seed_demo_events
 
 # Stable chart/graph behavior plus reaction-aware explainable attention alerts.
-# The network accepts replies, mentions, co-discussion, and provider-observed
-# public follow relationships when both endpoints exist in the evidence set.
 analytics.alerts = complete_alerts
 analytics.timeline = stable_timeline
 analytics.build_network = stable_network
