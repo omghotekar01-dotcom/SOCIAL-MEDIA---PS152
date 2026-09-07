@@ -151,7 +151,7 @@ export default function TimelinePro({ points, events }: Props) {
         </div>
 
         <div className="timeline-chart-shell">
-          <ResponsiveContainer width="100%" height={420} minWidth={0}>
+          <ResponsiveContainer width="100%" height={420}>
             <ComposedChart data={data} margin={{ top: 18, right: 18, bottom: 8, left: 0 }}>
               <CartesianGrid stroke={colors.grid} strokeDasharray="4 6" vertical={false} />
               <XAxis dataKey="time" stroke={colors.text} tick={{ fill: colors.text, fontSize: 11 }} tickLine={false} axisLine={{ stroke: colors.grid }} minTickGap={28} />
