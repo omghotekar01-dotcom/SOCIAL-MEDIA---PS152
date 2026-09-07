@@ -3,10 +3,15 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  CheckCircle2,
+  Clock3,
+  Command,
   Database,
   Download,
   ExternalLink,
   GitBranch,
+  Globe2,
+  Layers3,
   ListVideo,
   Network,
   Play,
@@ -19,6 +24,7 @@ import {
   Upload,
   Users,
   Waypoints,
+  Zap,
 } from 'lucide-react';
 import {
   Area,
@@ -97,6 +103,15 @@ function Metric({ label, value, helper, icon: Icon }: { label: string; value: st
   );
 }
 
+function PulseCard({ icon: Icon, label, value, note, tone = 'neutral' }: { icon: typeof Activity; label: string; value: string | number; note: string; tone?: 'neutral' | 'good' | 'warn' }) {
+  return (
+    <div className={`pulse-card pulse-${tone}`}>
+      <div className="pulse-icon"><Icon size={17} /></div>
+      <div className="pulse-copy"><span>{label}</span><strong>{value}</strong><small>{note}</small></div>
+    </div>
+  );
+}
+
 function ConnectorStrip({ connectors }: { connectors: ConnectorStatus[] }) {
   return (
     <div className="connector-strip">
@@ -160,10 +175,10 @@ function TimelineView({ points }: { points: TimelinePoint[] }) {
             <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
             <XAxis dataKey="time" tick={{ fontSize: 12 }} />
             <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-            <Tooltip contentStyle={{ background: '#11182a', border: '1px solid #2a3550', borderRadius: 12 }} />
-            <Area type="monotone" dataKey="count" stroke="#77a7ff" fill="#77a7ff" fillOpacity={0.12} strokeWidth={3} />
-            <Line type="monotone" dataKey="negative" stroke="#ff7c88" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="positive" stroke="#54d8a7" strokeWidth={2} dot={false} />
+            <Tooltip contentStyle={{ background: 'var(--surface-elevated)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: 'var(--shadow-md)' }} />
+            <Area type="monotone" dataKey="count" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.12} strokeWidth={3} />
+            <Line type="monotone" dataKey="negative" stroke="var(--bad)" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="positive" stroke="var(--good)" strokeWidth={2} dot={false} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -325,6 +340,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const queryRef = useRef<HTMLInputElement>(null);
 
   const loadAll = useCallback(async () => {
     try {
@@ -357,6 +373,21 @@ function App() {
   }, [selectedNarrativeId]);
 
   useEffect(() => { void loadAll(); }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
+      if (((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') || (event.key === '/' && !typing)) {
+        event.preventDefault();
+        queryRef.current?.focus();
+        queryRef.current?.select();
+      }
+      if (event.key === 'Escape' && document.activeElement === queryRef.current) queryRef.current?.blur();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useEffect(() => {
     if (!collector?.running) return;
@@ -440,6 +471,13 @@ function App() {
     () => Object.entries(overview?.platform_mix || {}).sort((a, b) => b[1] - a[1]),
     [overview],
   );
+  const liveEventCount = useMemo(() => events.filter((event) => event.source_mode === 'LIVE').length, [events]);
+  const readyConnectorCount = useMemo(() => connectors.filter((item) => item.state === 'READY' || item.state === 'LIVE').length, [connectors]);
+  const latestEventAt = useMemo(() => events.reduce<string | null>((latest, event) => {
+    if (!latest) return event.created_at;
+    return new Date(event.created_at).getTime() > new Date(latest).getTime() ? event.created_at : latest;
+  }, null), [events]);
+  const coverageLimited = events.length > 0 && platformEntries.length < 2;
 
   return (
     <div className="app-shell">
@@ -449,7 +487,7 @@ function App() {
           <div><strong>NEXUS</strong><span>Narrative & Influence Intelligence · SIH26152</span></div>
         </div>
         <div className="top-actions">
-          <div className="query-box"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void runFreshSearch(); }} placeholder="New topic, phrase or #hashtag" /></div>
+          <div className="query-box"><Search size={17} /><input ref={queryRef} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void runFreshSearch(); }} placeholder="New topic, phrase or #hashtag" aria-label="Search a new social-media topic" /><kbd><Command size={11} />K</kbd></div>
           <button className="btn btn-primary" disabled={loading || !query.trim()} onClick={() => void runFreshSearch()}><Search size={15} /> Fresh Search</button>
           <button className="btn btn-secondary" disabled={loading || !query.trim()} title="Append official X evidence to the current workspace" onClick={() => action('X evidence added to current workspace', () => api.searchX(query.trim()))}>+ X</button>
           <button className="btn btn-secondary" disabled={loading || !query.trim()} title="Append official YouTube evidence to the current workspace" onClick={() => action('YouTube evidence added to current workspace', () => api.searchYouTube(query.trim()))}>+ YouTube</button>
@@ -485,6 +523,20 @@ function App() {
                 <div><div className="eyebrow">Workspace · {activeQuery}</div><h1>What is moving — and why?</h1><p>Each Fresh Search replaces the previous topic. Source buttons only enrich the current workspace.</p></div>
                 <button className="icon-btn" onClick={() => void loadAll()} title="Refresh current workspace"><RefreshCw size={18} /></button>
               </div>
+
+              <section className="workspace-pulse" aria-label="Workspace source health">
+                <div className="workspace-pulse-head">
+                  <div><span className="eyebrow">Live intelligence pulse</span><h2>Workspace readiness</h2></div>
+                  <div className="pulse-status"><span className={collector?.running ? 'pulse-live-dot' : 'pulse-ready-dot'} />{collector?.running ? 'Continuous collection active' : 'Ready for analyst search'}</div>
+                </div>
+                <div className="pulse-grid">
+                  <PulseCard icon={Zap} label="Live evidence" value={`${liveEventCount}/${events.length}`} note="events sourced as LIVE" tone={liveEventCount > 0 ? 'good' : 'neutral'} />
+                  <PulseCard icon={Globe2} label="Platform coverage" value={platformEntries.length} note={platformEntries.length === 1 ? 'single-source coverage' : 'distinct platforms observed'} tone={coverageLimited ? 'warn' : platformEntries.length > 1 ? 'good' : 'neutral'} />
+                  <PulseCard icon={CheckCircle2} label="Connectors ready" value={`${readyConnectorCount}/${connectors.length || 0}`} note="official/live states currently ready" tone={readyConnectorCount > 1 ? 'good' : 'neutral'} />
+                  <PulseCard icon={Clock3} label="Latest evidence" value={latestEventAt ? new Date(latestEventAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'} note={latestEventAt ? fmt(latestEventAt) : 'no events collected yet'} />
+                </div>
+                {coverageLimited && <div className="coverage-warning"><AlertTriangle size={17} /><div><strong>Coverage limited to one platform.</strong><span>Add Telegram/X/Bluesky/other evidence before presenting cross-platform conclusions.</span></div><button className="text-btn" onClick={() => setTab('posts')}>Inspect source →</button></div>}
+              </section>
 
               <div className="metric-grid">
                 <Metric icon={Database} label="Observed events" value={overview?.total_events || 0} helper="current search workspace only" />
