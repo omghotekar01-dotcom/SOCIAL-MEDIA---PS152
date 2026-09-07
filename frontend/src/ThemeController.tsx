@@ -26,6 +26,36 @@ export default function ThemeController() {
     try { window.localStorage.setItem(STORAGE_KEY, theme); } catch { /* noop */ }
   }, [theme]);
 
+  // Free Source Lab intentionally updates the active evidence workspace without
+  // forcing each connector component to know about App's internal React state.
+  // A short reload makes every dashboard view, chart and evidence count converge
+  // on the same backend snapshot after a successful connector action.
+  useEffect(() => {
+    let timer: number | undefined;
+    const onWorkspaceUpdated = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => window.location.reload(), 180);
+    };
+    window.addEventListener('nexus:workspace-updated', onWorkspaceUpdated);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('nexus:workspace-updated', onWorkspaceUpdated);
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncNetworkState = () => {
+      document.documentElement.dataset.network = navigator.onLine ? 'online' : 'offline';
+    };
+    syncNetworkState();
+    window.addEventListener('online', syncNetworkState);
+    window.addEventListener('offline', syncNetworkState);
+    return () => {
+      window.removeEventListener('online', syncNetworkState);
+      window.removeEventListener('offline', syncNetworkState);
+    };
+  }, []);
+
   const next = theme === 'light' ? 'dark' : 'light';
 
   return (
