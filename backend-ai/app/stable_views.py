@@ -75,10 +75,10 @@ def _domain(url: str) -> str:
 def stable_network(events: list[SocialEvent], narrative_id: str | None = None) -> dict[str, Any]:
     """Build an explainable observed/co-discussion network.
 
-    Strong edges represent replies/mentions. Lower-weight edges represent shared
-    domains, hashtags, topic terms or narrative co-amplification. The latter are
-    explicitly similarity/co-discussion relationships, never claims that two
-    accounts directly interacted.
+    Strong edges represent replies, mentions, and provider-exposed public follow
+    relationships. Lower-weight edges represent shared domains, hashtags, topic
+    terms or narrative co-amplification. Co-discussion relationships are never
+    presented as proof that two accounts directly interacted.
     """
     chosen = [e for e in events if narrative_id is None or e.narrative_cluster_id == narrative_id]
     graph = nx.DiGraph()
@@ -106,7 +106,7 @@ def stable_network(events: list[SocialEvent], narrative_id: str | None = None) -
         else:
             graph.add_edge(source, target, weight=weight, types={edge_type})
 
-    # Direct observed interactions.
+    # Direct observed interactions and provider-reported relationship evidence.
     for event in chosen:
         source = event.author_pseudo_id
         if not source:
@@ -117,6 +117,12 @@ def stable_network(events: list[SocialEvent], narrative_id: str | None = None) -
             target = handle_to_node.get(mention.lower().lstrip("@"))
             if target:
                 add_edge(source, target, "mention", 1.5)
+        following = (event.public_profile or {}).get("observed_following_handles") or []
+        if isinstance(following, list):
+            for handle in following[:100]:
+                target = handle_to_node.get(str(handle).lower().lstrip("@"))
+                if target:
+                    add_edge(source, target, "public-follow", 1.15)
 
     # Low-weight co-discussion relationships. These are deliberately bounded to
     # avoid turning a shared keyword into a strong influence claim.
