@@ -25,6 +25,12 @@ type ReactionSummary = {
   flags: string[];
 };
 
+type ProviderCommentState = {
+  label: string;
+  detail: string;
+  tone: 'good' | 'warn' | 'bad' | 'info';
+};
+
 function reactionLike(event: SocialEvent) {
   const type = (event.event_type || '').toLowerCase();
   return Boolean(event.parent_event_id) || /comment|reply|replied_to|response/.test(type);
@@ -46,6 +52,75 @@ function findRoot(selected: SocialEvent, events: SocialEvent[]) {
 
 function pct(value: number) {
   return `${Math.round(value * 100)}%`;
+}
+
+function providerCommentState(root: SocialEvent, captured: number): ProviderCommentState | null {
+  if (root.platform !== 'youtube') return null;
+
+  const profile = root.public_profile || {};
+  const state = String(profile.comments_state || '').toLowerCase();
+  const note = String(profile.comments_note || '').trim();
+  const reported = Number(profile.reported_comment_count || root.engagement?.comments || 0);
+  const connector = String(profile.connector || '');
+  const metadataOnly = root.source_event_id.startsWith('free:') || /yt_dlp|public_metadata/i.test(connector);
+
+  if (metadataOnly) {
+    return {
+      label: 'METADATA ONLY — COMMENTS NOT REQUESTED',
+      detail: 'This record came from the zero-key YouTube metadata path. Re-run the exact URL through Fresh Search/Data API on the updated build to collect public comments and replies.',
+      tone: 'warn',
+    };
+  }
+  if (state === 'available' || captured > 0) {
+    return {
+      label: `COMMENTS AVAILABLE · ${captured} CAPTURED`,
+      detail: note || `YouTube Data API returned ${captured} public comment/reply event${captured === 1 ? '' : 's'} for this video.`,
+      tone: 'good',
+    };
+  }
+  if (state === 'disabled') {
+    return {
+      label: 'COMMENTS DISABLED BY YOUTUBE/CREATOR',
+      detail: note || 'YouTube returned commentsDisabled for this video, so there are no public comment rows available through the Data API.',
+      tone: 'bad',
+    };
+  }
+  if (state === 'empty') {
+    return {
+      label: 'NO PUBLIC COMMENTS REPORTED',
+      detail: 'The official video metadata reports zero public comments for this video.',
+      tone: 'info',
+    };
+  }
+  if (state === 'no_rows_returned') {
+    return {
+      label: 'COMMENTS REPORTED, BUT NO ROWS RETURNED',
+      detail: `YouTube reports ${reported} comment${reported === 1 ? '' : 's'}, but commentThreads returned no public rows in this request. Try the comments doctor or another public video.`,
+      tone: 'warn',
+    };
+  }
+  if (state === 'rate_limited') {
+    return {
+      label: 'YOUTUBE COMMENTS RATE LIMITED',
+      detail: note || 'The YouTube comment endpoint rate-limited this request. The root video is preserved but audience analysis is incomplete.',
+      tone: 'bad',
+    };
+  }
+  if (state === 'forbidden' || state === 'unavailable') {
+    return {
+      label: 'YOUTUBE COMMENT API UNAVAILABLE',
+      detail: note || 'The official comment endpoint could not return public comments for this video. Check API permissions/quota and the video comment state.',
+      tone: 'bad',
+    };
+  }
+  if (state === 'pending') {
+    return {
+      label: 'COMMENT COLLECTION STATE PENDING',
+      detail: 'The video was ingested but its final comment availability state was not resolved. Re-run on the latest build; this state should not persist after the connector finishes.',
+      tone: 'warn',
+    };
+  }
+  return null;
 }
 
 function buildSummary(selected: SocialEvent, events: SocialEvent[]): ReactionSummary {
@@ -135,6 +210,7 @@ function buildSummary(selected: SocialEvent, events: SocialEvent[]): ReactionSum
 export default function ReactionIntelligence({ event, events }: Props) {
   const summary = buildSummary(event, events);
   const n = summary.reactions.length;
+  const providerState = providerCommentState(summary.root, n);
 
   return (
     <section className="reaction-card">
@@ -150,6 +226,13 @@ export default function ReactionIntelligence({ event, events }: Props) {
           <small>reaction risk / 100</small>
         </div>
       </div>
+
+      {providerState && (
+        <div className={`reaction-provider-state reaction-provider-${providerState.tone}`}>
+          {providerState.tone === 'bad' ? <AlertTriangle size={16} /> : <ShieldCheck size={16} />}
+          <div><strong>{providerState.label}</strong><span>{providerState.detail}</span></div>
+        </div>
+      )}
 
       <div className="reaction-verdict">
         {summary.riskLabel === 'ESCALATING' ? <AlertTriangle size={17} /> : <ShieldCheck size={17} />}
@@ -182,7 +265,7 @@ export default function ReactionIntelligence({ event, events }: Props) {
           </div>
         </>
       ) : (
-        <div className="reaction-empty"><ShieldCheck size={15} /><span>No comments/replies are currently linked to this evidence item. NEXUS will not infer public opinion from the root post alone. Use a provider comment connector or Manual X Conversation Import when required.</span></div>
+        <div className="reaction-empty"><ShieldCheck size={15} /><span>No comments/replies are currently linked to this evidence item. NEXUS will not infer public opinion from the root post alone. The provider-state message above explains whether comments were disabled, unavailable, or simply not requested by the selected connector.</span></div>
       )}
 
       <div className="reaction-trust"><ShieldCheck size={14} /> The score is evidence-bounded and descriptive. It indicates reaction direction/attention in collected comments, not wrongdoing, intent, or absolute internet-wide opinion.</div>
