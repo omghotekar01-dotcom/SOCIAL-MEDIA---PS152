@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from app.priority_free_connectors import _extract_x_urls, _matches_query, _parse_channel_spec
 from app.schemas import SocialEventIn, WorkspaceSearchRequest
+from app.x_embed_resilience import extract_x_post_urls
 
 
 def event(text: str) -> SocialEventIn:
@@ -59,3 +60,14 @@ def test_x_public_post_urls_are_detected_without_accepting_random_urls():
         "https://twitter.com/other/status/987654321",
     ]
     assert _extract_x_urls("https://example.com/post/123") == []
+
+
+def test_resilient_x_url_normalizer_accepts_copied_mobile_and_tracking_links():
+    value = (
+        "https://www.x.com/example/status/1234567890?s=20 "
+        "https://mobile.twitter.com/other/status/987654321?ref_src=twsrc%5Etfw"
+    )
+    assert extract_x_post_urls(value) == [
+        "https://x.com/example/status/1234567890",
+        "https://twitter.com/other/status/987654321",
+    ]
