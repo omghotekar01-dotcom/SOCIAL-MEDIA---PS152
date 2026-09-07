@@ -34,6 +34,13 @@ function youtubeEmbed(event: SocialEvent): string {
   return videoId ? `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` : '';
 }
 
+function xEmbedDoc(event: SocialEvent): string {
+  if (event.platform !== 'x') return '';
+  const raw = typeof event.public_profile?.oembed_html === 'string' ? event.public_profile.oembed_html.trim() : '';
+  if (!raw) return '';
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;background:#050a12;color:#fff;min-height:100%;display:grid;place-items:center}body{padding:12px;box-sizing:border-box}.twitter-tweet{max-width:550px!important;width:100%!important}</style></head><body>${raw}<script async src="https://platform.x.com/widgets.js" charset="utf-8"></script></body></html>`;
+}
+
 function avatarUrl(event: SocialEvent) {
   return profileValue(event, 'avatar_url') || profileValue(event, 'profile_pic_url');
 }
@@ -89,6 +96,7 @@ export default function PostExplorer({ events, selectedId, onSelect }: Props) {
   }
 
   const embed = youtubeEmbed(selected);
+  const xDoc = xEmbedDoc(selected);
   const thumbnail = thumbnailUrl(selected);
   const avatar = avatarUrl(selected);
   const connector = String(selected.public_profile?.connector || 'unknown');
@@ -138,6 +146,13 @@ export default function PostExplorer({ events, selectedId, onSelect }: Props) {
               title="Selected YouTube evidence"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
+            />
+          ) : xDoc ? (
+            <iframe
+              className="post-video-frame"
+              srcDoc={xDoc}
+              title="Selected X public Post"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
             />
           ) : thumbnail ? (
             <img className="post-main-image" src={thumbnail} alt="Selected post media" referrerPolicy="no-referrer" />
