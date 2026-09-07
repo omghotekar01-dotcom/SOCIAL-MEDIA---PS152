@@ -209,6 +209,7 @@ export default function TimelinePro({ points, events }: Props) {
   const platformSet = new Set(
     effectivePoints.flatMap((point) => Object.keys(point.platforms || {})),
   );
+  const sparse = data.length <= 4;
 
   if (!data.length) {
     return (
@@ -255,7 +256,7 @@ export default function TimelinePro({ points, events }: Props) {
           <div>
             <span className="eyebrow">Exact chronology</span>
             <h2>Conversation volume & sentiment movement</h2>
-            <p>Volume bars and polarity lines preserve the chronology of the collected dataset.</p>
+            <p>Volume bars and polarity lines preserve the chronology of the collected dataset. Sparse searches show markers so one or two buckets remain visible.</p>
           </div>
           <div className="timeline-legend" aria-label="Timeline legend">
             <span><i style={{ background: colors.volume }} />Volume</span>
@@ -266,16 +267,16 @@ export default function TimelinePro({ points, events }: Props) {
         </div>
 
         <div className="timeline-chart-shell">
-          <ResponsiveContainer width="100%" height={390}>
+          <ResponsiveContainer width="100%" height={390} minWidth={280}>
             <ComposedChart data={data} margin={{ top: 18, right: 18, bottom: 8, left: 0 }}>
               <CartesianGrid stroke={colors.grid} strokeDasharray="4 6" vertical={false} />
               <XAxis dataKey="time" stroke={colors.text} tick={{ fill: colors.text, fontSize: 11 }} tickLine={false} axisLine={{ stroke: colors.grid }} minTickGap={28} />
               <YAxis allowDecimals={false} stroke={colors.text} tick={{ fill: colors.text, fontSize: 11 }} tickLine={false} axisLine={false} width={34} />
               <Tooltip contentStyle={{ background: colors.tooltipBg, color: colors.text, border: `1px solid ${colors.tooltipBorder}`, borderRadius: 14 }} />
-              <Bar dataKey="count" name="Volume" fill={colors.volume} radius={[7, 7, 2, 2]} maxBarSize={42} minPointSize={5} opacity={0.78} />
-              <Line type="monotone" dataKey="positive" name="Positive" stroke={colors.positive} strokeWidth={2.5} dot={false} />
-              <Line type="monotone" dataKey="negative" name="Negative" stroke={colors.negative} strokeWidth={2.5} dot={false} />
-              <Line type="monotone" dataKey="neutral" name="Neutral" stroke={colors.neutral} strokeWidth={2} strokeDasharray="5 5" dot={false} />
+              <Bar isAnimationActive={false} dataKey="count" name="Volume" fill={colors.volume} radius={[7, 7, 2, 2]} maxBarSize={42} minPointSize={5} opacity={0.78} />
+              <Line isAnimationActive={false} type="monotone" dataKey="positive" name="Positive" stroke={colors.positive} strokeWidth={2.5} dot={sparse ? { r: 4, fill: colors.positive, strokeWidth: 0 } : false} activeDot={{ r: 5 }} />
+              <Line isAnimationActive={false} type="monotone" dataKey="negative" name="Negative" stroke={colors.negative} strokeWidth={2.5} dot={sparse ? { r: 4, fill: colors.negative, strokeWidth: 0 } : false} activeDot={{ r: 5 }} />
+              <Line isAnimationActive={false} type="monotone" dataKey="neutral" name="Neutral" stroke={colors.neutral} strokeWidth={2} strokeDasharray="5 5" dot={sparse ? { r: 3.5, fill: colors.neutral, strokeWidth: 0 } : false} activeDot={{ r: 5 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -291,7 +292,7 @@ export default function TimelinePro({ points, events }: Props) {
         </div>
 
         <div className="timeline-chart-shell">
-          <ResponsiveContainer width="100%" height={370}>
+          <ResponsiveContainer width="100%" height={370} minWidth={280}>
             <ComposedChart data={data} margin={{ top: 18, right: 18, bottom: 8, left: 0 }}>
               <CartesianGrid stroke={colors.grid} strokeDasharray="4 6" vertical={false} />
               <XAxis dataKey="time" stroke={colors.text} tick={{ fill: colors.text, fontSize: 11 }} tickLine={false} axisLine={{ stroke: colors.grid }} minTickGap={28} />
@@ -300,12 +301,14 @@ export default function TimelinePro({ points, events }: Props) {
               {EMOTION_LINES.map(([label, stroke]) => (
                 <Line
                   key={label}
+                  isAnimationActive={false}
                   type="monotone"
                   dataKey={label}
                   name={label.charAt(0).toUpperCase() + label.slice(1)}
                   stroke={stroke}
                   strokeWidth={2}
-                  dot={false}
+                  dot={sparse ? { r: 3.5, fill: stroke, strokeWidth: 0 } : false}
+                  activeDot={{ r: 5 }}
                 />
               ))}
             </ComposedChart>
@@ -323,15 +326,15 @@ export default function TimelinePro({ points, events }: Props) {
         </div>
 
         <div className="timeline-chart-shell">
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={320} minWidth={280}>
             <ComposedChart data={data} margin={{ top: 18, right: 18, bottom: 8, left: 0 }}>
               <CartesianGrid stroke={colors.grid} strokeDasharray="4 6" vertical={false} />
               <XAxis dataKey="time" stroke={colors.text} tick={{ fill: colors.text, fontSize: 11 }} tickLine={false} axisLine={{ stroke: colors.grid }} minTickGap={28} />
               <YAxis domain={[0, 100]} stroke={colors.text} tick={{ fill: colors.text, fontSize: 11 }} tickLine={false} axisLine={false} width={38} />
               <Tooltip contentStyle={{ background: colors.tooltipBg, color: colors.text, border: `1px solid ${colors.tooltipBorder}`, borderRadius: 14 }} />
-              <Line type="monotone" dataKey="supportive" name="Supportive stance %" stroke="#7c3aed" strokeWidth={2.2} dot={false} />
-              <Line type="monotone" dataKey="against" name="Against stance %" stroke="#dc2626" strokeWidth={2.2} dot={false} />
-              <Line type="monotone" dataKey="sarcasm" name="Sarcasm %" stroke={colors.neutral} strokeWidth={2} strokeDasharray="5 5" dot={false} />
+              <Line isAnimationActive={false} type="monotone" dataKey="supportive" name="Supportive stance %" stroke="#7c3aed" strokeWidth={2.2} dot={sparse ? { r: 4, fill: '#7c3aed', strokeWidth: 0 } : false} activeDot={{ r: 5 }} />
+              <Line isAnimationActive={false} type="monotone" dataKey="against" name="Against stance %" stroke="#dc2626" strokeWidth={2.2} dot={sparse ? { r: 4, fill: '#dc2626', strokeWidth: 0 } : false} activeDot={{ r: 5 }} />
+              <Line isAnimationActive={false} type="monotone" dataKey="sarcasm" name="Sarcasm %" stroke={colors.neutral} strokeWidth={2} strokeDasharray="5 5" dot={sparse ? { r: 3.5, fill: colors.neutral, strokeWidth: 0 } : false} activeDot={{ r: 5 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -371,7 +374,7 @@ export default function TimelinePro({ points, events }: Props) {
           <ShieldCheck size={16} />
           <span>{usedFallback
             ? 'Backend timeline returned no points, so NEXUS reconstructed chronology from collected evidence without inventing events.'
-            : 'Exact source timestamps are preserved separately from ingestion time. Zero-volume chart padding never becomes synthetic evidence.'}</span>
+            : 'Exact source timestamps are preserved separately from ingestion time. Sparse chart markers are visual only and never become synthetic evidence.'}</span>
         </div>
       </section>
     </div>
