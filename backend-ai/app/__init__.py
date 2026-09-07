@@ -11,42 +11,49 @@ from .scalable_clusters import scalable_assign_clusters
 from .telegram_rich import telegram_rich_poll
 from .youtube_official import youtube_official_search
 
-# IMPORTANT: patch connector/cluster functions before importing collector modules.
-# Those modules bind functions with `from ... import ...`; patching afterwards
-# would leave continuous collection on legacy implementations.
+# Patch connector + clustering functions first. Collector modules bind these with
+# `from ... import ...`, so ordering matters.
 connectors.telegram_poll = telegram_rich_poll
 connectors.youtube_search = youtube_official_search
 analytics.assign_clusters = scalable_assign_clusters
 
+# Patch analysis primitives before alert_engine/stable_alerts are imported. This
+# ensures alerts, narratives, API routes and continuous collection all use the
+# same full-population implementations instead of stale function references.
 from .advanced_analytics import advanced_demographics, advanced_infer_text, advanced_trend_metrics
-from .advanced_collector import AdvancedCollectorManager, AdvancedCollectorStartRequest
-from .complete_alerts import complete_alerts
+from .stable_views import stable_network, stable_timeline
+from .complete_narratives import complete_narrative_summaries
+
+analytics.infer_text = advanced_infer_text
+analytics.demographics = advanced_demographics
+analytics.trend_metrics = advanced_trend_metrics
+analytics.timeline = stable_timeline
+analytics.build_network = stable_network
+analytics.narrative_summaries = complete_narrative_summaries
+
 from .complete_demo import complete_seed_demo_events
 from .complete_overview import complete_overview
+
+analytics.seed_demo_events = complete_seed_demo_events
+analytics.overview = complete_overview
+
+# Import reaction-aware alerts only after narrative/trend/network functions above
+# are bound, because alert_engine imports those names during module initialization.
+from .complete_alerts import complete_alerts
+
+analytics.alerts = complete_alerts
+
+# Collector now binds the hardened connector + scalable cluster functions.
+from .advanced_collector import AdvancedCollectorManager, AdvancedCollectorStartRequest
 from .conversation_connectors import mastodon_search_with_replies, reddit_search_with_comments
 from .priority_free_connectors import telegram_monitored_search
 from .relationship_enrichment import bluesky_search_with_relationships
 from .resilient_connectors import instagram_resilient_profile, mastodon_resilient_search, reddit_resilient_search
-from .stable_views import stable_network, stable_timeline
 from .x_embed_resilience import x_resilient_oembed_or_bridge
 
 # Backward-compatible public name retained for older preflight/tests/imports while
 # the active implementation is the hardened multi-endpoint X oEmbed connector.
 x_oembed_or_bridge = x_resilient_oembed_or_bridge
-
-# SIH26152 analysis contract: eight emotion dimensions, explicit stance/sarcasm,
-# aggregate privacy-conscious demographics, near-term trend momentum, and a
-# deterministic reaction-rich jury dataset that is always labelled REPLAY.
-analytics.infer_text = advanced_infer_text
-analytics.demographics = advanced_demographics
-analytics.trend_metrics = advanced_trend_metrics
-analytics.overview = complete_overview
-analytics.seed_demo_events = complete_seed_demo_events
-
-# Stable chart/graph behavior plus reaction-aware explainable attention alerts.
-analytics.alerts = complete_alerts
-analytics.timeline = stable_timeline
-analytics.build_network = stable_network
 
 # Preserve route signatures while strengthening public/fallback behavior and
 # collecting linked public replies/comments where the provider exposes them.
