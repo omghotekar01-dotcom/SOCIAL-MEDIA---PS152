@@ -23,14 +23,7 @@ def _recent_peak(
     cluster: list[SocialEvent],
     all_events: list[SocialEvent],
 ) -> tuple[dict, object, list[SocialEvent]]:
-    """Return the strongest recent prefix-level trend state for a narrative.
-
-    Trend cards describe the current/latest bucket. Alerts are different: once a
-    narrative crosses the threshold, an analyst must still see that alert even
-    if the next bucket cools or contains a correction. We therefore inspect the
-    most recent two hours (8 x 15-minute buckets) and retain the strongest
-    threshold-crossing state with its actual observation timestamp.
-    """
+    """Return the strongest recent prefix-level trend state for a narrative."""
     if not cluster:
         return {"score": 0.0, "status": "STABLE"}, None, []
 
@@ -63,20 +56,15 @@ def _recent_peak(
 
 
 def persistent_alerts(store: EventStore) -> list[AlertOut]:
-    """Generate alerts that remain visible after a recent threshold crossing.
-
-    Current trend status remains untouched in narrative analytics. This alert
-    engine only latches a qualifying recent peak, preventing a genuine burst
-    from disappearing because the immediately following bucket cooled.
-    """
+    """Generate latched alerts from the full active evidence population."""
     narratives = narrative_summaries(store)
-    all_events = store.list_events(limit=5000)
+    all_events = store.list_events(limit=None)
     network = build_network(all_events)
     top_nodes = network["nodes"][:5]
     output: list[AlertOut] = []
 
     for narrative in narratives:
-        cluster = store.list_events(limit=5000, narrative_id=narrative["id"])
+        cluster = store.list_events(limit=None, narrative_id=narrative["id"])
         if not cluster:
             continue
 
@@ -88,8 +76,6 @@ def persistent_alerts(store: EventStore) -> list[AlertOut]:
         if not current_qualifies and not peak_qualifies:
             continue
 
-        # Prefer the stronger state. If the current state has cooled, keep the
-        # recent crossing and preserve its original trigger timestamp.
         if peak_qualifies and float(peak.get("score", 0.0)) > float(current.get("score", 0.0)):
             trigger = peak
             trigger_cluster = peak_cluster
@@ -108,9 +94,7 @@ def persistent_alerts(store: EventStore) -> list[AlertOut]:
 
         reasons: list[str] = []
         if latched_from_recent_peak:
-            reasons.append(
-                "Recent peak threshold crossing retained after the latest bucket cooled"
-            )
+            reasons.append("Recent peak threshold crossing retained after the latest bucket cooled")
             reasons.append(
                 f"Peak trend score {float(trigger['score']):.2f}; current score {float(current['score']):.2f}"
             )
