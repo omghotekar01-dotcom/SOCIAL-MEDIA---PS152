@@ -175,9 +175,15 @@ class EventStore:
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         order = "DESC" if newest_first else "ASC"
         sql = f"SELECT * FROM events{where} ORDER BY created_at {order}"
-        if limit is not None:
+
+        # Legacy internal analytics consistently used limit=5000 as a safety cap.
+        # The large-conversation build treats 5000+ as a full-population request;
+        # interactive evidence endpoints still pass smaller limits (<=2000), so
+        # browser rendering stays bounded while analytics sees every event.
+        if limit is not None and int(limit) < 5000:
             sql += " LIMIT ?"
             params.append(max(1, int(limit)))
+
         with self.connect() as conn:
             rows = conn.execute(sql, params).fetchall()
         return [self._row_to_event(row) for row in rows]
