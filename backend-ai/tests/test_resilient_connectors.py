@@ -1,6 +1,5 @@
+import asyncio
 from datetime import datetime, timezone
-
-import pytest
 
 from app.connectors import ConnectorError
 from app.resilient_connectors import (
@@ -54,8 +53,7 @@ def test_reddit_oauth_payload_parser_keeps_public_evidence_fields():
     assert rows[0].source_mode == "LIVE"
 
 
-@pytest.mark.asyncio
-async def test_reddit_resilient_search_uses_public_fallback(monkeypatch):
+def test_reddit_resilient_search_uses_public_fallback(monkeypatch):
     monkeypatch.setattr(resilient.SETTINGS, "reddit_client_id", "")
     monkeypatch.setattr(resilient.SETTINGS, "reddit_client_secret", "")
 
@@ -64,13 +62,12 @@ async def test_reddit_resilient_search_uses_public_fallback(monkeypatch):
         return [event("reddit")]
 
     monkeypatch.setattr(resilient, "_base_reddit_public_search", fake_public)
-    rows = await reddit_resilient_search("RiverLink", 5)
+    rows = asyncio.run(reddit_resilient_search("RiverLink", 5))
     assert len(rows) == 1
     assert rows[0].platform == "reddit"
 
 
-@pytest.mark.asyncio
-async def test_mastodon_resilient_search_retries_instances(monkeypatch):
+def test_mastodon_resilient_search_retries_instances(monkeypatch):
     monkeypatch.setattr(resilient, "_mastodon_candidates", lambda _requested: ["https://one.example", "https://two.example"])
     calls: list[str] = []
 
@@ -81,13 +78,12 @@ async def test_mastodon_resilient_search_retries_instances(monkeypatch):
         return [event("mastodon")]
 
     monkeypatch.setattr(resilient, "_base_mastodon_search", fake_search)
-    rows = await mastodon_resilient_search("RiverLink", 5)
+    rows = asyncio.run(mastodon_resilient_search("RiverLink", 5))
     assert calls == ["https://one.example", "https://two.example"]
     assert rows[0].public_profile["resilient_instance_selection"] == "https://two.example"
 
 
-@pytest.mark.asyncio
-async def test_instagram_resilient_profile_prefers_configured_bridge(monkeypatch):
+def test_instagram_resilient_profile_prefers_configured_bridge(monkeypatch):
     monkeypatch.setattr(resilient.SETTINGS, "instagram_public_rss_url_template", "https://bridge.example/?q={query}")
 
     async def fake_bridge(platform: str, template: str, query: str, target: str, limit: int):
@@ -99,5 +95,5 @@ async def test_instagram_resilient_profile_prefers_configured_bridge(monkeypatch
 
     monkeypatch.setattr(resilient, "_configured_bridge", fake_bridge)
     monkeypatch.setattr(resilient, "_base_instagram_public_profile", should_not_run)
-    rows = await instagram_resilient_profile("demo", 5)
+    rows = asyncio.run(instagram_resilient_profile("demo", 5))
     assert rows[0].platform == "instagram"
