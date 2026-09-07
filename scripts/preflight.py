@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED = [
+    "START_HERE.md",
     "backend-ai/app/main.py",
     "backend-ai/app/analytics.py",
     "backend-ai/app/stable_alerts.py",
@@ -51,6 +52,7 @@ REQUIRED = [
     "backend-java/src/main/java/in/sih/nexus/controller/GatewayController.java",
     "scripts/start_demo.bat",
     "scripts/start_full.bat",
+    "scripts/export_submission.bat",
     "scripts/seed_demo.py",
     "scripts/doctor.py",
     "scripts/convert_social_export.py",
