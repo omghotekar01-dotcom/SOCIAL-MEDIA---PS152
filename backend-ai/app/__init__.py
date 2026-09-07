@@ -12,8 +12,9 @@ from .advanced_collector import AdvancedCollectorManager, AdvancedCollectorStart
 from .complete_alerts import complete_alerts
 from .complete_demo import complete_seed_demo_events
 from .complete_overview import complete_overview
-from .conversation_connectors import bluesky_search_with_replies, mastodon_search_with_replies, reddit_search_with_comments
+from .conversation_connectors import mastodon_search_with_replies, reddit_search_with_comments
 from .priority_free_connectors import telegram_monitored_search
+from .relationship_enrichment import bluesky_search_with_relationships
 from .resilient_connectors import instagram_resilient_profile, mastodon_resilient_search, reddit_resilient_search
 from .stable_views import stable_network, stable_timeline
 from .x_embed_resilience import x_resilient_oembed_or_bridge
@@ -33,6 +34,8 @@ analytics.overview = complete_overview
 analytics.seed_demo_events = complete_seed_demo_events
 
 # Stable chart/graph behavior plus reaction-aware explainable attention alerts.
+# The network accepts replies, mentions, co-discussion, and provider-observed
+# public follow relationships when both endpoints exist in the evidence set.
 analytics.alerts = complete_alerts
 analytics.timeline = stable_timeline
 analytics.build_network = stable_network
@@ -44,7 +47,7 @@ connectors.youtube_search = youtube_official_search
 # collecting linked public replies/comments where the provider exposes them.
 free_connectors.telegram_public_channel = telegram_monitored_search
 free_connectors.x_public_bridge = x_resilient_oembed_or_bridge
-free_connectors.bluesky_search = bluesky_search_with_replies
+free_connectors.bluesky_search = bluesky_search_with_relationships
 free_connectors.reddit_public_search = reddit_search_with_comments
 free_connectors.mastodon_search = mastodon_search_with_replies
 free_connectors.instagram_public_profile = instagram_resilient_profile
