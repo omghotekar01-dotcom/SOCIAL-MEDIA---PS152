@@ -17,12 +17,22 @@ const SOURCES: SourceMeta[] = [
   {
     platform: 'telegram',
     label: 'Telegram',
-    official: 'Bot API / optional MTProto',
-    freePath: 'Public channel preview (zero-key)',
-    env: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_ALLOWED_CHAT_IDS'],
-    input: 'Public channel username, e.g. mychannel',
+    official: 'Bot API for authorized channel/chat updates',
+    freePath: 'Monitored public-channel preview + local query filtering',
+    env: ['TELEGRAM_PUBLIC_CHANNELS', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_ALLOWED_CHAT_IDS'],
+    input: 'Fresh Search uses configured channels automatically; manual input accepts public channel username',
     demoPriority: 'HIGH',
-    note: 'Best live SIH source. Public-channel mode needs no token; Bot API enables authorized continuous polling.',
+    note: 'Primary SIH source. Configure comma-separated public channel usernames once; every Fresh Search then includes query-matching Telegram posts at zero API cost. Bot API is the best controlled live-demo addition.',
+  },
+  {
+    platform: 'x',
+    label: 'X / Twitter',
+    official: 'X API v2 recent search (pay-per-use)',
+    freePath: 'Official public Post oEmbed by explicit URL; optional permitted RSS/Atom bridge',
+    env: ['X_BEARER_TOKEN', 'X_PUBLIC_RSS_URL_TEMPLATE'],
+    input: 'Free: public X Post URL(s). Paid: keyword/hashtag query.',
+    demoPriority: 'HIGH',
+    note: 'Primary SIH source. Free mode ingests known public Post URLs through X oEmbed and renders the official embed. Automatic keyword search needs X API credits; NEXUS does not falsely claim free global X search.',
   },
   {
     platform: 'youtube',
@@ -35,16 +45,6 @@ const SOURCES: SourceMeta[] = [
     note: 'Zero-key mode is metadata-first. Add the API key for official search and comments.',
   },
   {
-    platform: 'x',
-    label: 'X / Twitter',
-    official: 'X API v2 recent search',
-    freePath: 'Configured permitted RSS/Atom bridge or IMPORT',
-    env: ['X_BEARER_TOKEN', 'X_PUBLIC_RSS_URL_TEMPLATE'],
-    input: 'Search query / hashtag',
-    demoPriority: 'MEDIUM',
-    note: 'Do not depend on paid X access for the core demo. Use official access only when provisioned; otherwise show IMPORT/REPLAY honestly.',
-  },
-  {
     platform: 'instagram',
     label: 'Instagram',
     official: 'Meta Graph API / approved hashtag access',
@@ -52,7 +52,7 @@ const SOURCES: SourceMeta[] = [
     env: ['META_ACCESS_TOKEN', 'META_INSTAGRAM_ACCOUNT_ID'],
     input: 'Public username or one hashtag',
     demoPriority: 'MEDIUM',
-    note: 'Anonymous access is unstable. Authorized Meta access is the production path; public fallback must never bypass login/private controls.',
+    note: 'Anonymous access is unstable. Authorized Meta access is the production path; public fallback never bypasses login/private controls.',
   },
   {
     platform: 'facebook',
@@ -72,7 +72,7 @@ const SOURCES: SourceMeta[] = [
     env: [],
     input: 'Search topic / keyword',
     demoPriority: 'HIGH',
-    note: 'Excellent free cross-platform live source when the public endpoint is reachable.',
+    note: 'Excellent zero-key cross-platform live source when the public endpoint is reachable.',
   },
   {
     platform: 'reddit',
@@ -135,7 +135,7 @@ export default function ConnectionCenter() {
       <div style={{ minHeight: 46, display: 'flex', alignItems: 'center', gap: 10, padding: '7px 16px' }}>
         <PlugZap size={16} />
         <strong style={{ fontSize: 12, letterSpacing: '.08em' }}>CONNECTION CENTER</strong>
-        <span style={{ fontSize: 11, opacity: .7 }}>{liveReady}/{SOURCES.length} sources currently report ready/live</span>
+        <span style={{ fontSize: 11, opacity: .7 }}>{liveReady}/{SOURCES.length} official connector states ready/live · free fallbacks shown below</span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, opacity: .72 }}>
           <ShieldCheck size={13} /> secrets stay in local .env
         </span>
@@ -150,7 +150,7 @@ export default function ConnectionCenter() {
       {open && (
         <div style={{ padding: '6px 16px 16px' }}>
           <div style={{ padding: 11, borderRadius: 10, background: '#0b1728', border: '1px solid #26364e', fontSize: 11, lineHeight: 1.5, marginBottom: 10 }}>
-            <strong>How to read this:</strong> READY/LIVE means NEXUS can use at least one honest path now. CREDENTIALS/PERMISSION means the official path needs account-side setup. DEGRADED means a public fallback exists but may be unstable. Never paste API tokens into this website or commit them to GitHub; put them only in your local <code>.env</code>.
+            <strong>How to read this:</strong> the status badge reflects the backend's official/richer connector state. The <b>Free/fallback</b> line shows what NEXUS can still do without that credential. For X, a yellow credentials badge can coexist with free public-Post oEmbed because oEmbed fetches explicit Post URLs, not global keyword search. Never paste API tokens into this website or commit them to GitHub; put them only in local <code>.env</code>.
           </div>
           {error && <div style={{ color: '#fda4af', fontSize: 11, marginBottom: 10 }}>{error}</div>}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(285px,1fr))', gap: 10 }}>
@@ -172,7 +172,8 @@ export default function ConnectionCenter() {
                     <div><b style={{ color: '#d8e4f6' }}>Demo priority:</b> {source.demoPriority}</div>
                     {source.env.length > 0 && <div><b style={{ color: '#d8e4f6' }}>Local .env:</b> <code>{source.env.join(', ')}</code></div>}
                   </div>
-                  <p style={{ margin: '9px 0 0', fontSize: 10, lineHeight: 1.45, color: '#8494ab' }}>{status?.detail || source.note}</p>
+                  <p style={{ margin: '9px 0 0', fontSize: 10, lineHeight: 1.45, color: '#9aabc3' }}>{source.note}</p>
+                  {status?.detail && <p style={{ margin: '6px 0 0', fontSize: 9, lineHeight: 1.4, color: '#6f819d' }}>Backend: {status.detail}</p>}
                 </article>
               );
             })}
