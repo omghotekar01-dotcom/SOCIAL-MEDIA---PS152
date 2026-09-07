@@ -32,6 +32,7 @@ REQUIRED = [
     "backend-ai/tests/test_meta_discovery.py",
     "backend-ai/tests/test_stable_alerts.py",
     "backend-ai/tests/test_export_converter.py",
+    "frontend/public/nexus.svg",
     "frontend/src/App.tsx",
     "frontend/src/AppErrorBoundary.tsx",
     "frontend/src/ConnectionCenter.tsx",
@@ -45,6 +46,7 @@ REQUIRED = [
     "frontend/src/command-center.css",
     "frontend/src/responsive-pro.css",
     "frontend/src/resilience.css",
+    "frontend/src/brand-polish.css",
     "frontend/src/api.ts",
     "frontend/src/main.tsx",
     "frontend/package.json",
@@ -91,6 +93,7 @@ UI_CONTRACTS: dict[str, tuple[str, ...]] = {
         "nexus:workspace-updated",
         "responsive-pro.css",
         "resilience.css",
+        "brand-polish.css",
     ),
     "frontend/src/FreeConnectorPanel.tsx": (
         "nexus:workspace-updated",
