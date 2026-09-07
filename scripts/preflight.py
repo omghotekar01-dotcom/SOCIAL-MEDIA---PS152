@@ -18,6 +18,7 @@ REQUIRED = [
     "backend-ai/app/connectors.py",
     "backend-ai/app/free_connectors.py",
     "backend-ai/app/priority_free_connectors.py",
+    "backend-ai/app/resilient_connectors.py",
     "backend-ai/app/youtube_official.py",
     "backend-ai/app/meta_discovery.py",
     "backend-ai/app/certificates.py",
@@ -26,6 +27,7 @@ REQUIRED = [
     "backend-ai/tests/test_core.py",
     "backend-ai/tests/test_free_connectors.py",
     "backend-ai/tests/test_priority_free_connectors.py",
+    "backend-ai/tests/test_resilient_connectors.py",
     "backend-ai/tests/test_api_contracts.py",
     "backend-ai/tests/test_telegram_polling.py",
     "backend-ai/tests/test_youtube_official.py",
@@ -34,10 +36,14 @@ REQUIRED = [
     "backend-ai/tests/test_export_converter.py",
     "frontend/public/nexus.svg",
     "frontend/src/App.tsx",
+    "frontend/src/AppPro.tsx",
     "frontend/src/AppErrorBoundary.tsx",
     "frontend/src/ConnectionCenter.tsx",
     "frontend/src/FreeConnectorPanel.tsx",
     "frontend/src/PostExplorer.tsx",
+    "frontend/src/TimelinePro.tsx",
+    "frontend/src/NetworkPro.tsx",
+    "frontend/src/EvidenceLedger.tsx",
     "frontend/src/ThemeController.tsx",
     "frontend/src/styles.css",
     "frontend/src/post-explorer.css",
@@ -47,6 +53,9 @@ REQUIRED = [
     "frontend/src/responsive-pro.css",
     "frontend/src/resilience.css",
     "frontend/src/brand-polish.css",
+    "frontend/src/product-polish.css",
+    "frontend/src/analysis-pro.css",
+    "frontend/src/source-pro.css",
     "frontend/src/api.ts",
     "frontend/src/main.tsx",
     "frontend/package.json",
@@ -71,11 +80,30 @@ REQUIRED = [
 ]
 
 UI_CONTRACTS: dict[str, tuple[str, ...]] = {
-    "frontend/src/App.tsx": (
-        "workspace-pulse",
-        "coverageLimited",
-        "queryRef",
-        "Live intelligence pulse",
+    "frontend/src/AppPro.tsx": (
+        "TimelinePro",
+        "NetworkPro",
+        "EvidenceLedger",
+        "Fresh Search",
+        "LIVE / REPLAY / IMPORT disclosed",
+    ),
+    "frontend/src/TimelinePro.tsx": (
+        "ComposedChart",
+        "bucketEvents",
+        "Conversation volume & sentiment movement",
+        "No timeline evidence yet",
+    ),
+    "frontend/src/NetworkPro.tsx": (
+        "Community & influence map",
+        "Node inspector",
+        "High Reach Node",
+        "Bridge Node",
+    ),
+    "frontend/src/EvidenceLedger.tsx": (
+        "Export visible CSV",
+        "Search text, author, hashtag",
+        "LIVE",
+        "IMPORT",
     ),
     "frontend/src/PostExplorer.tsx": (
         "ModeFilter",
@@ -89,21 +117,39 @@ UI_CONTRACTS: dict[str, tuple[str, ...]] = {
         "theme-color",
     ),
     "frontend/src/main.tsx": (
+        "AppPro",
         "AppErrorBoundary",
         "nexus:workspace-updated",
-        "responsive-pro.css",
-        "resilience.css",
-        "brand-polish.css",
+        "analysis-pro.css",
+        "source-pro.css",
     ),
     "frontend/src/FreeConnectorPanel.tsx": (
+        "Enrich All Available",
+        "xOfficial",
+        "instagramMeta",
+        "facebookMeta",
         "nexus:workspace-updated",
-        "LoaderCircle",
-        "aria-modal",
     ),
     "frontend/src/ConnectionCenter.tsx": (
         "ConnectionFilter",
         "High priority",
         "aria-modal",
+    ),
+}
+
+BACKEND_CONTRACTS: dict[str, tuple[str, ...]] = {
+    "backend-ai/app/__init__.py": (
+        "reddit_resilient_search",
+        "mastodon_resilient_search",
+        "instagram_resilient_profile",
+        "telegram_monitored_search",
+        "x_oembed_or_bridge",
+    ),
+    "backend-ai/app/resilient_connectors.py": (
+        "_reddit_oauth_search",
+        "reddit_resilient_search",
+        "mastodon_resilient_search",
+        "instagram_resilient_profile",
     ),
 }
 
@@ -142,6 +188,22 @@ def check_node_version(node: str) -> tuple[bool, str]:
     return supported, raw
 
 
+def check_contracts(group: str, contracts: dict[str, tuple[str, ...]]) -> int:
+    failures = 0
+    for rel, required_tokens in contracts.items():
+        path = ROOT / rel
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        missing = [token for token in required_tokens if token not in text]
+        if missing:
+            fail(f"{group} contract missing in {rel}: {', '.join(missing)}")
+            failures += 1
+        else:
+            ok(f"{group} contract: {rel}")
+    return failures
+
+
 def main() -> int:
     failures = 0
     print("NEXUS / SIH26152 PRE-FLIGHT\n")
@@ -154,17 +216,8 @@ def main() -> int:
             fail(f"missing required file: {rel}")
             failures += 1
 
-    for rel, required_tokens in UI_CONTRACTS.items():
-        path = ROOT / rel
-        if not path.exists():
-            continue
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        missing = [token for token in required_tokens if token not in text]
-        if missing:
-            fail(f"modern UI contract missing in {rel}: {', '.join(missing)}")
-            failures += 1
-        else:
-            ok(f"modern UI contract: {rel}")
+    failures += check_contracts("modern UI", UI_CONTRACTS)
+    failures += check_contracts("connector resilience", BACKEND_CONTRACTS)
 
     syntax_failures = 0
     for root_dir in (ROOT / "backend-ai", ROOT / "scripts"):
@@ -202,13 +255,18 @@ def main() -> int:
     required_env_keys = {
         "NEXUS_DB_URL",
         "X_BEARER_TOKEN",
+        "X_PUBLIC_RSS_URL_TEMPLATE",
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_PUBLIC_CHANNELS",
         "YOUTUBE_API_KEY",
         "META_ACCESS_TOKEN",
         "META_INSTAGRAM_ACCOUNT_ID",
-        "X_PUBLIC_RSS_URL_TEMPLATE",
+        "META_FACEBOOK_PAGE_ID",
+        "INSTAGRAM_PUBLIC_RSS_URL_TEMPLATE",
+        "REDDIT_CLIENT_ID",
+        "REDDIT_CLIENT_SECRET",
         "MASTODON_BASE_URL",
+        "MASTODON_FALLBACK_BASE_URLS",
     }
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8") if (ROOT / ".env.example").exists() else ""
     missing_env = sorted(key for key in required_env_keys if f"{key}=" not in env_example)
@@ -216,7 +274,7 @@ def main() -> int:
         fail(".env.example missing: " + ", ".join(missing_env))
         failures += 1
     else:
-        ok(".env.example exposes official + free/public connector configuration")
+        ok(".env.example exposes official + resilient free/public connector configuration")
 
     python = sys.executable or shutil.which("python") or shutil.which("python3")
     if python:
@@ -232,7 +290,7 @@ def main() -> int:
                 ok("backend pytest suite")
             else:
                 fail("backend pytest suite failed")
-                print(output[-4000:])
+                print(output[-5000:])
                 failures += 1
     else:
         warn("Python executable not found")
@@ -258,14 +316,14 @@ def main() -> int:
                 ok("frontend TypeScript typecheck")
             else:
                 fail("frontend TypeScript typecheck failed")
-                print(output[-4000:])
+                print(output[-5000:])
                 failures += 1
             code, output = run([npm, "run", "build"], ROOT / "frontend")
             if code == 0:
                 ok("frontend production build")
             else:
                 fail("frontend production build failed")
-                print(output[-4000:])
+                print(output[-5000:])
                 failures += 1
         else:
             warn("frontend/node_modules absent; run npm install before production build")
