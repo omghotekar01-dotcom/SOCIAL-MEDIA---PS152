@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 Platform = Literal[
@@ -92,7 +93,7 @@ class TelegramPollRequest(BaseModel):
 
 
 class TelegramPublicRequest(BaseModel):
-    channel: str = Field(min_length=4, max_length=64)
+    channel: str = Field(min_length=4, max_length=1000)
     limit: int = Field(default=25, ge=1, le=100)
 
 
@@ -107,6 +108,11 @@ class WorkspaceSearchRequest(BaseModel):
     A normal search replaces the previous result pool before collecting the new
     topic, which prevents unrelated searches from colliding in analytics.
     Individual connector buttons can still append evidence afterwards.
+
+    TELEGRAM_PUBLIC_CHANNELS in `.env` is automatically used when the request
+    does not provide an explicit channel target. The active query is attached to
+    the internal channel specification so the monitored-channel connector can
+    filter public Telegram posts before ingestion.
     """
 
     query: str = Field(min_length=1, max_length=300)
@@ -116,13 +122,23 @@ class WorkspaceSearchRequest(BaseModel):
     enable_bluesky: bool = True
     enable_reddit: bool = True
     enable_mastodon: bool = True
-    telegram_channel: str | None = Field(default=None, max_length=64)
+    telegram_channel: str | None = Field(default=None, max_length=1000)
     instagram_profile: str | None = Field(default=None, max_length=30)
+
+    @model_validator(mode="after")
+    def attach_monitored_telegram_query(self):
+        raw = (self.telegram_channel or os.getenv("TELEGRAM_PUBLIC_CHANNELS", "")).strip()
+        if raw:
+            raw = raw.split("||", 1)[0].strip()
+            self.telegram_channel = f"{raw}||{self.query}"
+        else:
+            self.telegram_channel = None
+        return self
 
 
 class PublicBridgeRequest(BaseModel):
-    query: str = Field(default="", max_length=300)
-    target: str = Field(default="", max_length=200)
+    query: str = Field(default="", max_length=2000)
+    target: str = Field(default="", max_length=4000)
     limit: int = Field(default=25, ge=1, le=100)
 
 
