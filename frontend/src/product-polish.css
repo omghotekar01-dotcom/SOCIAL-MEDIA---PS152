@@ -1,0 +1,271 @@
+/* Final NEXUS product polish: accessibility, resilience, responsive behavior and micro-interactions. */
+
+:root {
+  --focus-ring: color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+html { scroll-behavior: smooth; }
+
+:focus-visible {
+  outline: 3px solid var(--focus-ring) !important;
+  outline-offset: 2px;
+}
+
+button, a, input, summary { -webkit-tap-highlight-color: transparent; }
+button { user-select: none; }
+
+/* Network state is exposed globally by ThemeController. */
+:root[data-network="offline"] body::before {
+  content: "Offline mode · live sources may be unavailable";
+  position: fixed;
+  left: 50%;
+  top: 10px;
+  transform: translateX(-50%);
+  z-index: 120;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--warn) 36%, var(--border));
+  background: color-mix(in srgb, var(--warn-soft) 92%, var(--surface-solid));
+  color: var(--warn);
+  box-shadow: var(--shadow-sm);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .03em;
+}
+
+/* Avoid visual overlap from very long evidence/source strings. */
+.panel,
+.metric-card,
+.trend-card,
+.connection-card,
+.post-primary-card,
+.post-info-card,
+.post-stat,
+.lineage-card,
+.alert-card,
+.sidebar-foot,
+.connection-facts b,
+.connection-facts code,
+.post-fact strong,
+.post-text-full,
+.evidence-text {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Premium interaction, intentionally subtle for an analyst tool. */
+.metric-card,
+.panel,
+.trend-card,
+.post-stat,
+.connection-card,
+.post-result-card,
+.btn,
+.nav-item,
+.utility-square-btn,
+.connection-launcher,
+.free-source-launcher {
+  will-change: transform;
+}
+
+.metric-card:hover,
+.post-stat:hover,
+.connection-card:hover {
+  transform: translateY(-2px);
+}
+
+.panel { transition: border-color .16s ease, box-shadow .18s ease, background .2s ease; }
+.panel:hover { border-color: color-mix(in srgb, var(--border-strong) 84%, var(--border)); }
+
+/* Charts and graph surfaces should never spill outside cards. */
+.chart-wrap,
+.network-canvas,
+.post-media-panel { contain: layout paint; }
+.recharts-responsive-container { min-width: 0 !important; }
+.recharts-wrapper { max-width: 100%; }
+
+/* Stronger table ergonomics. */
+.table-panel {
+  overflow-x: auto !important;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.evidence-row { min-width: 980px; }
+.evidence-head {
+  backdrop-filter: blur(18px);
+  box-shadow: 0 1px 0 var(--border);
+}
+
+/* Result rail uses a contained modern scrollbar. */
+.post-result-list,
+.connection-grid,
+.free-source-drawer,
+.connection-drawer {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.post-result-list::-webkit-scrollbar,
+.connection-grid::-webkit-scrollbar,
+.free-source-drawer::-webkit-scrollbar,
+.connection-drawer::-webkit-scrollbar { width: 8px; height: 8px; }
+.post-result-list::-webkit-scrollbar-thumb,
+.connection-grid::-webkit-scrollbar-thumb,
+.free-source-drawer::-webkit-scrollbar-thumb,
+.connection-drawer::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+/* Media polish. */
+.post-main-image,
+.post-result-media img,
+.post-avatar {
+  background: var(--surface-muted);
+}
+.post-video-frame { background: #000; }
+.post-open-source { text-decoration: none !important; }
+
+/* Make empty states feel intentional rather than broken. */
+.empty,
+.post-empty,
+.connection-empty {
+  background:
+    radial-gradient(circle at 50% 20%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 55%),
+    var(--surface-muted);
+}
+
+/* Small loading affordance for any rotating refresh icon. */
+.spin-icon { animation: nexus-spin .9s linear infinite; }
+@keyframes nexus-spin { to { transform: rotate(360deg); } }
+
+/* Desktop density tuning. */
+@media (min-width: 1500px) {
+  .body-grid { grid-template-columns: 218px minmax(0, 1fr) !important; }
+  .sidebar { padding-inline: 14px !important; }
+  .content { padding-inline: 38px !important; }
+  .metric-grid { grid-template-columns: repeat(4, minmax(190px, 1fr)); }
+  .overview-grid { grid-template-columns: minmax(0, 2.15fr) minmax(320px, .85fr) !important; }
+  .post-explorer { grid-template-columns: 370px minmax(0, 1fr) !important; }
+}
+
+/* Laptop widths: preserve information density without collisions. */
+@media (max-width: 1280px) {
+  .topbar { align-items: flex-start !important; padding-right: 94px !important; }
+  .brand { min-width: 205px !important; }
+  .brand span { max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top-actions { flex: 1; }
+  .query-box { width: min(100%, 310px) !important; }
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .overview-grid,
+  .narrative-layout,
+  .network-layout { grid-template-columns: 1fr !important; }
+  .narrative-side { position: static !important; }
+  .network-rank { max-height: none !important; }
+}
+
+/* Tablet/mobile: sidebar becomes a horizontally scrollable section switcher. */
+@media (max-width: 900px) {
+  .theme-switcher {
+    top: 10px !important;
+    right: 10px !important;
+    min-width: 44px !important;
+    width: 44px;
+    padding: 0 !important;
+    justify-content: center;
+  }
+  .theme-switcher-copy { display: none !important; }
+
+  .topbar {
+    position: relative !important;
+    padding: 14px 14px 12px !important;
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .brand { padding-right: 52px; }
+  .top-actions { justify-content: flex-start !important; width: 100%; }
+  .query-box { width: 100% !important; order: -1; }
+
+  .connector-strip { padding-inline: 12px !important; }
+  .body-grid { display: block !important; }
+  .sidebar {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 24;
+    height: auto !important;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 8px 10px !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+  .sidebar-label,
+  .sidebar-foot { display: none !important; }
+  .nav-item {
+    width: auto !important;
+    min-width: max-content;
+    margin: 0 !important;
+    padding: 0 11px !important;
+  }
+  .nav-item.active { box-shadow: inset 0 -3px 0 var(--accent) !important; }
+
+  .content { padding: 20px 12px 88px !important; }
+  .banner { margin: 10px 12px 0 !important; }
+  .page-head { flex-direction: column; }
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .trend-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .post-explorer { grid-template-columns: 1fr !important; }
+  .post-result-rail { position: relative !important; top: auto !important; height: 380px !important; }
+  .post-analysis-grid { grid-template-columns: 1fr !important; }
+  .post-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+
+  .connection-launcher,
+  .free-source-launcher { bottom: 12px !important; }
+  .connection-launcher { left: 12px !important; }
+  .free-source-launcher { right: 12px !important; }
+  .connection-drawer,
+  .free-source-drawer {
+    width: min(94vw, 620px) !important;
+    border-radius: 20px 0 0 20px !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .brand span { display: none !important; }
+  .top-actions .btn { flex: 1 1 auto; justify-content: center; }
+  .metric-grid,
+  .post-metric-grid { grid-template-columns: 1fr !important; }
+  .metric-card { min-height: 94px !important; }
+  .section-head,
+  .row-between,
+  .post-author-row { align-items: flex-start !important; flex-wrap: wrap; }
+  .post-open-source { margin-left: 0 !important; }
+  .post-text-full { font-size: 14px !important; }
+  .connection-drawer,
+  .free-source-drawer {
+    inset: 0 !important;
+    width: 100vw !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+  }
+  .connection-filter-bar { overflow-x: auto; flex-wrap: nowrap !important; }
+}
+
+/* Respect OS accessibility preferences. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root,
+  :root[data-theme="light"],
+  :root[data-theme="dark"] { --border: var(--border-strong); }
+  .panel, .metric-card, .btn, .nav-item, .post-info-card { border-width: 2px !important; }
+}
