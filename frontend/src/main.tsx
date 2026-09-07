@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import AppPro from './AppPro';
 import AppErrorBoundary from './AppErrorBoundary';
 import ConnectionCenter from './ConnectionCenter';
 import FreeConnectorPanel from './FreeConnectorPanel';
@@ -14,6 +14,7 @@ import './responsive-pro.css';
 import './resilience.css';
 import './brand-polish.css';
 import './product-polish.css';
+import './analysis-pro.css';
 
 function NexusRuntime() {
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
@@ -28,7 +29,7 @@ function NexusRuntime() {
     <>
       <ThemeController />
       <AppErrorBoundary>
-        <App key={workspaceVersion} />
+        <AppPro key={workspaceVersion} />
         <ConnectionCenter />
         <FreeConnectorPanel />
       </AppErrorBoundary>
