@@ -42,7 +42,12 @@ class Settings(BaseSettings):
 
     youtube_api_key: str = ""
     youtube_max_videos_per_run: int = 5
-    youtube_max_comments_per_video: int = 100
+    # 0 = no application-side count/page cap. The connector follows every
+    # nextPageToken until YouTube exhausts public data or provider quota/rate
+    # limits stop the request. Operators can set positive ceilings if required.
+    youtube_max_comments_per_video: int = 0
+    youtube_max_comment_pages_per_video: int = 0
+    youtube_max_reply_pages_per_thread: int = 0
 
     meta_graph_version: str = "v23.0"
     meta_access_token: str = ""
