@@ -21,12 +21,13 @@ analytics.assign_clusters = scalable_assign_clusters
 # Patch analysis primitives before alert_engine/stable_alerts are imported. This
 # ensures alerts, narratives, API routes and continuous collection all use the
 # same full-population implementations instead of stale function references.
-from .advanced_analytics import advanced_demographics, advanced_infer_text, advanced_trend_metrics
+from .advanced_analytics import advanced_infer_text, advanced_trend_metrics
+from .ps26152_demographics import ps26152_demographics
 from .stable_views import stable_network, stable_timeline
 from .complete_narratives import complete_narrative_summaries
 
 analytics.infer_text = advanced_infer_text
-analytics.demographics = advanced_demographics
+analytics.demographics = ps26152_demographics
 analytics.trend_metrics = advanced_trend_metrics
 analytics.timeline = stable_timeline
 analytics.build_network = stable_network
