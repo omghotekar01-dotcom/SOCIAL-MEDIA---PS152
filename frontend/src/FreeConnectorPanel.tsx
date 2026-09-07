@@ -37,9 +37,14 @@ export default function FreeConnectorPanel() {
 
   useEffect(() => {
     if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
   }, [open]);
 
   const run = async (name: ActionName, fn: () => Promise<any>, refresh = true) => {
@@ -121,7 +126,7 @@ export default function FreeConnectorPanel() {
 
       {open && <button className="utility-backdrop free-source-backdrop" aria-label="Close free source lab" onClick={() => setOpen(false)} />}
 
-      <aside className={`free-source-drawer ${open ? 'open' : ''}`} aria-hidden={!open} aria-label="Free Source Lab">
+      <aside className={`free-source-drawer ${open ? 'open' : ''}`} aria-hidden={!open} aria-label="Free Source Lab" role="dialog" aria-modal={open ? 'true' : undefined}>
         <div className="utility-drawer-head free-source-head">
           <div>
             <div className="drawer-kicker">COLLECTION LAB</div>
