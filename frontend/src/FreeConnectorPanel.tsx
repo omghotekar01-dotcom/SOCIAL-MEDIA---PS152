@@ -23,6 +23,10 @@ async function post(path: string, body: unknown) {
   return request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 }
 
+function refreshWorkspace() {
+  window.dispatchEvent(new Event('nexus:workspace-updated'));
+}
+
 export default function FreeConnectorPanel() {
   const [query, setQuery] = useState('#RiverLinkUpdate');
   const [target, setTarget] = useState('');
@@ -38,13 +42,13 @@ export default function FreeConnectorPanel() {
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
-  const run = async (name: ActionName, fn: () => Promise<any>, reload = true) => {
+  const run = async (name: ActionName, fn: () => Promise<any>, refresh = true) => {
     setBusy(name); setMessage(''); setMessageGood(false);
     try {
       const result = await fn();
       setMessageGood(true);
-      setMessage(`${name.toUpperCase()}: ${result?.inserted ?? 0} new / ${result?.received ?? 0} received${reload ? ' · refreshing workspace…' : ''}`);
-      if (reload) window.setTimeout(() => window.location.reload(), 650);
+      setMessage(`${name.toUpperCase()}: ${result?.inserted ?? 0} new / ${result?.received ?? 0} received${refresh ? ' · workspace updated' : ''}`);
+      if (refresh) refreshWorkspace();
     } catch (error) {
       setMessageGood(false);
       setMessage(error instanceof Error ? error.message : 'Connector failed.');
@@ -81,8 +85,8 @@ export default function FreeConnectorPanel() {
       }
 
       setMessageGood(ok.length > 0);
-      setMessage(`FRESH MIX: ${totalInserted} posts · OK ${ok.join(', ') || 'none'}${unavailable.length ? ` · unavailable ${[...new Set(unavailable)].join(', ')}` : ''} · old topic cleared · refreshing workspace…`);
-      window.setTimeout(() => window.location.reload(), 850);
+      setMessage(`FRESH MIX: ${totalInserted} posts · OK ${ok.join(', ') || 'none'}${unavailable.length ? ` · unavailable ${[...new Set(unavailable)].join(', ')}` : ''} · old topic cleared · workspace updated`);
+      refreshWorkspace();
     } catch (error) {
       setMessageGood(false);
       setMessage(error instanceof Error ? error.message : 'Fresh workspace search failed.');
