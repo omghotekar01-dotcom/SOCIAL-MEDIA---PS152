@@ -15,6 +15,7 @@ import './resilience.css';
 import './brand-polish.css';
 import './product-polish.css';
 import './analysis-pro.css';
+import './source-pro.css';
 
 function NexusRuntime() {
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
