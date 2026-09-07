@@ -17,7 +17,7 @@ REQUIRED_FILES = [
     "backend-ai/tests/test_advanced_analytics.py",
     "backend-ai/tests/test_advanced_collector.py",
     "frontend/src/ReactionIntelligence.tsx",
-    "frontend/src/reaction-intelligence.css",
+    "frontend/src/conversation-intelligence.css",
     "frontend/src/FreeConnectorPanel.tsx",
     "frontend/src/PostExplorer.tsx",
 ]
