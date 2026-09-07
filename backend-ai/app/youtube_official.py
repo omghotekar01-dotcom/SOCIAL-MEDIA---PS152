@@ -115,7 +115,10 @@ async def _video_details(client: httpx.AsyncClient, key: str, video_ids: list[st
         raise ConnectorError("YouTube API rate limit reached while reading video metadata.", "RATE_LIMITED")
     if response.status_code == 403:
         reason = _error_reason(response)
-        raise ConnectorError(f"YouTube API quota/permission error while reading videos{f': {reason}' if reason else ''}.", "RATE_LIMITED")
+        raise ConnectorError(
+            f"YouTube API quota/permission error while reading videos{f': {reason}' if reason else ''}.",
+            "RATE_LIMITED",
+        )
     if response.status_code in {400, 401}:
         raise ConnectorError("YouTube API key/request is invalid.", "CREDENTIALS_REQUIRED")
     if response.status_code >= 400:
@@ -123,31 +126,53 @@ async def _video_details(client: httpx.AsyncClient, key: str, video_ids: list[st
     return list(response.json().get("items", []))
 
 
-async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialEventIn]:
-    """Official YouTube Data API v3 video + comment/reply ingestion.
+def _within_count_cap(captured: int, requested_cap: int) -> bool:
+    # 0 means exhaustive/provider-bounded mode: no application-side count cap.
+    return requested_cap <= 0 or captured < requested_cap
 
-    Prototype reliability improvements:
-    - accepts an exact YouTube URL/video id, bypassing search entirely;
-    - query search looks at a wider candidate set and prioritizes videos that
-      actually report comments instead of blindly choosing the newest uploads;
-    - keeps the root video even if comments are disabled;
-    - ingests top-level comments plus nested replies, fetching comments.list when
-      commentThreads only includes a reply subset.
+
+def _page_size(captured: int, requested_cap: int) -> int:
+    if requested_cap <= 0:
+        return 100
+    return max(1, min(100, requested_cap - captured))
+
+
+def _within_page_cap(page_number: int, configured_cap: int) -> bool:
+    # 0 means no application-side page ceiling. Provider quota/rate limits and
+    # nextPageToken are then the natural boundaries.
+    return configured_cap <= 0 or page_number < configured_cap
+
+
+async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialEventIn]:
+    """Official YouTube Data API v3 video + exhaustive comment/reply ingestion.
+
+    For an exact public video URL/id, ``max_comments_per_video=0`` means collect
+    every public top-level comment and reply that YouTube exposes, following
+    ``nextPageToken`` until exhaustion. Optional environment page ceilings remain
+    available for operators who need to protect a production quota, but the SIH
+    prototype defaults those ceilings to zero (provider-bounded/exhaustive).
     """
     key = SETTINGS.youtube_api_key
     if not key:
         raise ConnectorError(
             "YouTube API key is not configured. Add YOUTUBE_API_KEY for reliable official comment ingestion; "
-            "the zero-key path is best-effort only.",
+            "the zero-key path is metadata-only/best-effort.",
             "CREDENTIALS_REQUIRED",
         )
 
     run_id = f"yt-rich-{uuid4().hex[:10]}"
     max_videos = min(request.max_videos, SETTINGS.youtube_max_videos_per_run, 10)
-    max_comments = min(request.max_comments_per_video, SETTINGS.youtube_max_comments_per_video, 100)
+    requested_comment_cap = int(request.max_comments_per_video)
+    configured_comment_cap = int(SETTINGS.youtube_max_comments_per_video)
+    if configured_comment_cap > 0:
+        if requested_comment_cap <= 0:
+            requested_comment_cap = configured_comment_cap
+        else:
+            requested_comment_cap = min(requested_comment_cap, configured_comment_cap)
+
     output: list[SocialEventIn] = []
 
-    async with httpx.AsyncClient(timeout=25, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
         direct_video_id = _extract_video_id(request.query)
         search_rank: dict[str, int] = {}
 
@@ -171,7 +196,10 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
                 raise ConnectorError("YouTube API rate limit reached.", "RATE_LIMITED")
             if search_resp.status_code == 403:
                 reason = _error_reason(search_resp)
-                raise ConnectorError(f"YouTube API quota/permission error{f': {reason}' if reason else ''}. Check key restriction and quota.", "RATE_LIMITED")
+                raise ConnectorError(
+                    f"YouTube API quota/permission error{f': {reason}' if reason else ''}. Check key restriction and quota.",
+                    "RATE_LIMITED",
+                )
             if search_resp.status_code in {400, 401}:
                 raise ConnectorError("YouTube API key/request is invalid.", "CREDENTIALS_REQUIRED")
             if search_resp.status_code >= 400:
@@ -188,7 +216,11 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
         if not details:
             raise ConnectorError("YouTube returned no accessible public videos for this input.", "DEGRADED")
 
-        details = [item for item in details if str((item.get("status") or {}).get("privacyStatus") or "public") == "public"]
+        details = [
+            item
+            for item in details
+            if str((item.get("status") or {}).get("privacyStatus") or "public") == "public"
+        ]
         details.sort(
             key=lambda item: (
                 1 if _int((item.get("statistics") or {}).get("commentCount")) > 0 else 0,
@@ -222,7 +254,9 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
                 "channel_title": channel_title,
                 "reported_comment_count": reported_comments,
                 "comments_state": "pending",
-                "comment_selection": "relevance_with_nested_replies",
+                "comment_selection": "provider_exhaustive_pagination",
+                "requested_comment_cap": requested_comment_cap,
+                "exhaustive_requested": requested_comment_cap <= 0,
             }
             root = SocialEventIn(
                 platform="youtube",
@@ -243,105 +277,151 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
                 source_mode="LIVE",
                 connector_run_id=run_id,
             )
-            # Pydantic validates/copies mutable inputs. Rebind the working profile
-            # to the model-owned dictionary so comment availability/capture state
-            # written below is reflected in the event returned to callers.
             root_profile = root.public_profile
             output.append(root)
 
-            comments_resp = await client.get(
-                "https://www.googleapis.com/youtube/v3/commentThreads",
-                params={
+            captured = 0
+            top_level_captured = 0
+            replies_captured = 0
+            seen_comment_ids: set[str] = set()
+            thread_pages = 0
+            reply_pages = 0
+            thread_page_token: str | None = None
+            collection_complete = True
+            stop_reason = "provider_exhausted"
+            first_thread_request = True
+
+            while _within_count_cap(captured, requested_comment_cap) and _within_page_cap(
+                thread_pages, SETTINGS.youtube_max_comment_pages_per_video
+            ):
+                params: dict[str, Any] = {
                     "key": key,
                     "part": "snippet,replies",
                     "videoId": video_id,
                     "textFormat": "plainText",
-                    "maxResults": min(100, max_comments),
-                    "order": "relevance",
-                },
-            )
+                    "maxResults": _page_size(captured, requested_comment_cap),
+                    "order": "time",
+                }
+                if thread_page_token:
+                    params["pageToken"] = thread_page_token
 
-            if comments_resp.status_code == 403:
-                reason = _error_reason(comments_resp) or "forbidden"
-                root_profile["comments_state"] = "disabled" if reason == "commentsDisabled" else "forbidden"
-                root_profile["comments_note"] = reason
-                continue
-            if comments_resp.status_code == 429:
-                root_profile["comments_state"] = "rate_limited"
-                root_profile["comments_note"] = "YouTube commentThreads rate limit reached"
-                continue
-            if comments_resp.status_code >= 400:
-                root_profile["comments_state"] = "unavailable"
-                root_profile["comments_note"] = _error_reason(comments_resp) or f"HTTP {comments_resp.status_code}"
-                continue
-
-            captured = 0
-            seen_comment_ids: set[str] = set()
-            extra_reply_fetches = 0
-            thread_items = list(comments_resp.json().get("items", []))
-
-            for thread in thread_items:
-                if captured >= max_comments:
-                    break
-                thread_snippet = thread.get("snippet") or {}
-                top = thread_snippet.get("topLevelComment") or {}
-                top_id = str(top.get("id") or thread.get("id") or "")
-                top_event = _comment_event(
-                    video_id=video_id,
-                    raw=top,
-                    root_parent=f"video:{video_id}",
-                    run_id=run_id,
-                    thumb=thumb,
-                    is_reply=False,
+                comments_resp = await client.get(
+                    "https://www.googleapis.com/youtube/v3/commentThreads",
+                    params=params,
                 )
-                if top_event and top_id not in seen_comment_ids:
-                    output.append(top_event)
-                    captured += 1
-                    seen_comment_ids.add(top_id)
+                thread_pages += 1
 
-                if captured >= max_comments or not top_id:
-                    continue
+                if comments_resp.status_code == 403:
+                    reason = _error_reason(comments_resp) or "forbidden"
+                    if first_thread_request and reason == "commentsDisabled":
+                        root_profile["comments_state"] = "disabled"
+                        root_profile["comments_note"] = reason
+                        stop_reason = "comments_disabled"
+                    else:
+                        collection_complete = False
+                        stop_reason = reason or "forbidden"
+                    break
+                if comments_resp.status_code == 429:
+                    collection_complete = False
+                    stop_reason = "rate_limited"
+                    break
+                if comments_resp.status_code >= 400:
+                    collection_complete = False
+                    stop_reason = _error_reason(comments_resp) or f"HTTP {comments_resp.status_code}"
+                    break
 
-                inline_replies = list(((thread.get("replies") or {}).get("comments") or []))
-                for reply_raw in inline_replies:
-                    if captured >= max_comments:
+                first_thread_request = False
+                payload = comments_resp.json()
+                thread_items = list(payload.get("items", []))
+
+                for thread in thread_items:
+                    if not _within_count_cap(captured, requested_comment_cap):
+                        collection_complete = False
+                        stop_reason = "requested_count_cap"
                         break
-                    reply_id = str(reply_raw.get("id") or "")
-                    if not reply_id or reply_id in seen_comment_ids:
-                        continue
-                    reply_event = _comment_event(
+
+                    thread_snippet = thread.get("snippet") or {}
+                    top = thread_snippet.get("topLevelComment") or {}
+                    top_id = str(top.get("id") or thread.get("id") or "")
+                    top_event = _comment_event(
                         video_id=video_id,
-                        raw=reply_raw,
-                        root_parent=f"comment:{top_id}",
+                        raw=top,
+                        root_parent=f"video:{video_id}",
                         run_id=run_id,
                         thumb=thumb,
-                        is_reply=True,
+                        is_reply=False,
                     )
-                    if reply_event:
-                        output.append(reply_event)
+                    if top_event and top_id not in seen_comment_ids:
+                        output.append(top_event)
                         captured += 1
-                        seen_comment_ids.add(reply_id)
+                        top_level_captured += 1
+                        seen_comment_ids.add(top_id)
 
-                total_reply_count = _int(thread_snippet.get("totalReplyCount"))
-                if (
-                    captured < max_comments
-                    and total_reply_count > len(inline_replies)
-                    and extra_reply_fetches < 5
-                ):
-                    extra_reply_fetches += 1
-                    replies_resp = await client.get(
-                        "https://www.googleapis.com/youtube/v3/comments",
-                        params={
+                    if not top_id or not _within_count_cap(captured, requested_comment_cap):
+                        continue
+
+                    inline_replies = list(((thread.get("replies") or {}).get("comments") or []))
+                    for reply_raw in inline_replies:
+                        if not _within_count_cap(captured, requested_comment_cap):
+                            collection_complete = False
+                            stop_reason = "requested_count_cap"
+                            break
+                        reply_id = str(reply_raw.get("id") or "")
+                        if not reply_id or reply_id in seen_comment_ids:
+                            continue
+                        reply_event = _comment_event(
+                            video_id=video_id,
+                            raw=reply_raw,
+                            root_parent=f"comment:{top_id}",
+                            run_id=run_id,
+                            thumb=thumb,
+                            is_reply=True,
+                        )
+                        if reply_event:
+                            output.append(reply_event)
+                            captured += 1
+                            replies_captured += 1
+                            seen_comment_ids.add(reply_id)
+
+                    total_reply_count = _int(thread_snippet.get("totalReplyCount"))
+                    if total_reply_count <= len(inline_replies) or not _within_count_cap(captured, requested_comment_cap):
+                        continue
+
+                    reply_page_token: str | None = None
+                    per_thread_reply_page = 0
+                    while _within_count_cap(captured, requested_comment_cap) and _within_page_cap(
+                        per_thread_reply_page, SETTINGS.youtube_max_reply_pages_per_thread
+                    ):
+                        reply_params: dict[str, Any] = {
                             "key": key,
                             "part": "snippet",
                             "parentId": top_id,
                             "textFormat": "plainText",
-                            "maxResults": min(100, max_comments - captured),
-                        },
-                    )
-                    if replies_resp.status_code < 400:
-                        for reply_raw in replies_resp.json().get("items", []):
-                            if captured >= max_comments:
+                            "maxResults": _page_size(captured, requested_comment_cap),
+                        }
+                        if reply_page_token:
+                            reply_params["pageToken"] = reply_page_token
+                        replies_resp = await client.get(
+                            "https://www.googleapis.com/youtube/v3/comments",
+                            params=reply_params,
+                        )
+                        reply_pages += 1
+                        per_thread_reply_page += 1
+
+                        if replies_resp.status_code == 429:
+                            collection_complete = False
+                            stop_reason = "rate_limited_while_fetching_replies"
+                            break
+                        if replies_resp.status_code >= 400:
+                            collection_complete = False
+                            stop_reason = _error_reason(replies_resp) or f"reply_http_{replies_resp.status_code}"
+                            break
+
+                        reply_payload = replies_resp.json()
+                        for reply_raw in reply_payload.get("items", []):
+                            if not _within_count_cap(captured, requested_comment_cap):
+                                collection_complete = False
+                                stop_reason = "requested_count_cap"
                                 break
                             reply_id = str(reply_raw.get("id") or "")
                             if not reply_id or reply_id in seen_comment_ids:
@@ -357,15 +437,59 @@ async def youtube_official_search(request: YouTubeSearchRequest) -> list[SocialE
                             if reply_event:
                                 output.append(reply_event)
                                 captured += 1
+                                replies_captured += 1
                                 seen_comment_ids.add(reply_id)
 
+                        reply_page_token = reply_payload.get("nextPageToken")
+                        if not reply_page_token:
+                            break
+
+                    if (
+                        SETTINGS.youtube_max_reply_pages_per_thread > 0
+                        and per_thread_reply_page >= SETTINGS.youtube_max_reply_pages_per_thread
+                        and reply_page_token
+                    ):
+                        collection_complete = False
+                        stop_reason = "reply_page_ceiling"
+
+                thread_page_token = payload.get("nextPageToken")
+                if not thread_page_token:
+                    break
+
+            if (
+                SETTINGS.youtube_max_comment_pages_per_video > 0
+                and thread_pages >= SETTINGS.youtube_max_comment_pages_per_video
+                and thread_page_token
+            ):
+                collection_complete = False
+                stop_reason = "comment_thread_page_ceiling"
+
             root_profile["captured_comment_count"] = captured
-            root_profile["comments_state"] = "available" if captured else ("empty" if reported_comments == 0 else "no_rows_returned")
-            root_profile["comments_note"] = (
-                f"Captured {captured} public comments/replies through YouTube Data API v3."
-                if captured
-                else "No public comment rows were returned for this video in the current request."
+            root_profile["captured_top_level_comment_count"] = top_level_captured
+            root_profile["captured_reply_count"] = replies_captured
+            root_profile["comment_thread_pages_fetched"] = thread_pages
+            root_profile["reply_pages_fetched"] = reply_pages
+            root_profile["collection_complete"] = collection_complete
+            root_profile["collection_stop_reason"] = stop_reason
+            root_profile["coverage_ratio"] = (
+                round(min(1.0, captured / reported_comments), 4) if reported_comments > 0 else (1.0 if captured == 0 else None)
             )
+
+            if root_profile.get("comments_state") == "disabled":
+                continue
+            if captured:
+                root_profile["comments_state"] = "available"
+                completeness = "complete/provider-exhausted" if collection_complete else f"partial ({stop_reason})"
+                root_profile["comments_note"] = (
+                    f"Captured {captured} public comments/replies across {thread_pages} comment-thread page(s) "
+                    f"and {reply_pages} reply page(s); collection {completeness}."
+                )
+            elif reported_comments == 0:
+                root_profile["comments_state"] = "empty"
+                root_profile["comments_note"] = "YouTube reports no public comments for this video."
+            else:
+                root_profile["comments_state"] = "no_rows_returned"
+                root_profile["comments_note"] = f"YouTube reports comments, but no public rows were returned ({stop_reason})."
 
     if not output:
         raise ConnectorError("YouTube did not return any usable video/comment evidence.", "DEGRADED")
