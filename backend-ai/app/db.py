@@ -84,6 +84,8 @@ class EventStore:
                 CREATE INDEX IF NOT EXISTS idx_events_platform ON events(platform);
                 CREATE INDEX IF NOT EXISTS idx_events_narrative ON events(narrative_cluster_id);
                 CREATE INDEX IF NOT EXISTS idx_events_raw_hash ON events(raw_hash);
+                CREATE INDEX IF NOT EXISTS idx_events_conversation ON events(platform, conversation_id);
+                CREATE INDEX IF NOT EXISTS idx_events_parent ON events(platform, parent_event_id);
                 """
             )
 
@@ -111,10 +113,6 @@ class EventStore:
         return hashlib.sha256(basis.encode("utf-8")).hexdigest()
 
     def insert(self, event_in: SocialEventIn, derived: dict | None = None) -> SocialEvent | None:
-        # Build one payload before validation instead of expanding two mappings into
-        # SocialEvent(...). Some normalized/derived fields (for example `language`)
-        # intentionally overlap source fields; derived values should win without
-        # causing Python's "multiple values for keyword argument" TypeError.
         event_data = event_in.model_dump()
         event_data.update(derived or {})
         event_data["author_pseudo_id"] = self._pseudo(
@@ -161,7 +159,7 @@ class EventStore:
     def list_events(
         self,
         *,
-        limit: int = 500,
+        limit: int | None = 500,
         platform: str | None = None,
         narrative_id: str | None = None,
         newest_first: bool = False,
@@ -176,10 +174,27 @@ class EventStore:
             params.append(narrative_id)
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         order = "DESC" if newest_first else "ASC"
-        sql = f"SELECT * FROM events{where} ORDER BY created_at {order} LIMIT ?"
-        params.append(limit)
+        sql = f"SELECT * FROM events{where} ORDER BY created_at {order}"
+        if limit is not None:
+            sql += " LIMIT ?"
+            params.append(max(1, int(limit)))
         with self.connect() as conn:
             rows = conn.execute(sql, params).fetchall()
+        return [self._row_to_event(row) for row in rows]
+
+    def list_conversation_events(
+        self,
+        *,
+        platform: str,
+        conversation_id: str,
+        newest_first: bool = False,
+    ) -> list[SocialEvent]:
+        order = "DESC" if newest_first else "ASC"
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM events WHERE platform = ? AND conversation_id = ? ORDER BY created_at {order}",
+                (platform, conversation_id),
+            ).fetchall()
         return [self._row_to_event(row) for row in rows]
 
     def get_event(self, event_id: str) -> SocialEvent | None:
