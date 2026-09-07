@@ -26,6 +26,7 @@ import './conversation-intelligence.css';
 import './audience-pulse.css';
 import './live-watch.css';
 import './ps26152-audit.css';
+import './ps26152-network.css';
 
 function NexusRuntime() {
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
