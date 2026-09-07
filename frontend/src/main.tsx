@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import AppPro from './AppPro';
 import AppErrorBoundary from './AppErrorBoundary';
+import AudiencePulsePanel from './AudiencePulsePanel';
 import ConnectionCenter from './ConnectionCenter';
 import FreeConnectorPanel from './FreeConnectorPanel';
 import ThemeController from './ThemeController';
@@ -19,6 +20,7 @@ import './source-pro.css';
 import './view-fixes.css';
 import './analysis-hotfix.css';
 import './conversation-intelligence.css';
+import './audience-pulse.css';
 
 function NexusRuntime() {
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
@@ -35,6 +37,7 @@ function NexusRuntime() {
       <AppErrorBoundary>
         <AppPro key={workspaceVersion} />
         <ConnectionCenter />
+        <AudiencePulsePanel />
         <FreeConnectorPanel />
       </AppErrorBoundary>
     </>
