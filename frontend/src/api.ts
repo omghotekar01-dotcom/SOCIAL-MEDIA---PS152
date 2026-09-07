@@ -117,13 +117,24 @@ export interface SocialEvent {
   platform: string;
   source_event_id: string;
   event_type: string;
+  author_platform_id?: string | null;
   author_pseudo_id?: string | null;
   author_display?: string | null;
   text: string;
   language?: string | null;
   created_at: string;
+  ingested_at?: string;
   url?: string | null;
+  parent_event_id?: string | null;
+  conversation_id?: string | null;
+  mentions: string[];
+  hashtags: string[];
+  urls: string[];
+  engagement: Record<string, number | string | null>;
+  public_profile: Record<string, unknown>;
   source_mode: 'LIVE' | 'REPLAY' | 'IMPORT';
+  connector_run_id?: string | null;
+  raw_hash?: string;
   sentiment_label?: string | null;
   sentiment_score?: number | null;
   emotion_scores: Record<string, number>;
@@ -133,6 +144,20 @@ export interface SocialEvent {
   topic_terms: string[];
   narrative_cluster_id?: string | null;
   trend_score?: number | null;
+  quality_score?: number | null;
+  inference_method?: string | null;
+}
+
+export interface WorkspaceSearchResponse {
+  received: number;
+  inserted: number;
+  duplicates: number;
+  total_events: number;
+  query: string;
+  search_session_id: string;
+  reset: boolean;
+  message: string;
+  sources: Record<string, { state: string; received: number; detail?: string; connector?: string }>;
 }
 
 export interface NarrativeDetail extends NarrativeSummary {
@@ -148,6 +173,8 @@ export interface NarrativeDetail extends NarrativeSummary {
     sentiment?: string | null;
     stance?: string | null;
     source_url?: string | null;
+    engagement?: Record<string, unknown>;
+    public_profile?: Record<string, unknown>;
   }>;
   network: NetworkResponse;
   origin_claim: string;
@@ -228,6 +255,32 @@ export const api = {
   demographics: () => request<DemographicsResponse>('/api/demographics'),
   alerts: () => request<{ alerts: AlertItem[] }>('/api/alerts'),
   events: () => request<{ events: SocialEvent[] }>('/api/events?limit=500&newest_first=true'),
+  event: (id: string) => request<SocialEvent>(`/api/events/${encodeURIComponent(id)}`),
+  resetWorkspace: () => request<{ status: string; total_events: number }>('/api/workspace/reset', {
+    method: 'POST', body: '{}',
+  }),
+  searchWorkspace: (
+    query: string,
+    options?: {
+      reset?: boolean;
+      limitPerSource?: number;
+      telegramChannel?: string;
+      instagramProfile?: string;
+    },
+  ) => request<WorkspaceSearchResponse>('/api/search/workspace', {
+    method: 'POST',
+    body: JSON.stringify({
+      query,
+      reset: options?.reset ?? true,
+      limit_per_source: options?.limitPerSource ?? 15,
+      enable_youtube: true,
+      enable_bluesky: true,
+      enable_reddit: true,
+      enable_mastodon: true,
+      telegram_channel: options?.telegramChannel || null,
+      instagram_profile: options?.instagramProfile || null,
+    }),
+  }),
   seedDemo: () => request<{ inserted: number; total_events: number; message: string }>('/api/demo/seed', {
     method: 'POST', body: JSON.stringify({ reset: true }),
   }),

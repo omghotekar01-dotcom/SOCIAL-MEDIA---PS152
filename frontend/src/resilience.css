@@ -1,0 +1,9 @@
+.fatal-recovery{min-height:100vh;display:grid;place-items:center;padding:24px;background:var(--bg);color:var(--text)}
+.fatal-recovery-card{width:min(560px,100%);padding:28px;border:1px solid var(--border);border-radius:24px;background:var(--surface-elevated);box-shadow:var(--shadow-lg);text-align:left}
+.fatal-recovery-icon{width:52px;height:52px;display:grid;place-items:center;margin-bottom:18px;border-radius:16px;background:var(--bad-soft);color:var(--bad)}
+.fatal-recovery-card h1{margin:5px 0 10px;font-size:28px;letter-spacing:-.035em}
+.fatal-recovery-card p{margin:0 0 16px;color:var(--text-soft);line-height:1.6;font-size:13px}
+.fatal-recovery-note{display:flex;gap:8px;align-items:flex-start;margin:0 0 14px;padding:10px 11px;border:1px solid color-mix(in srgb,var(--good) 25%,var(--border));border-radius:12px;background:var(--good-soft);color:var(--good);font-size:10px;line-height:1.45}
+.fatal-recovery-card details{margin:0 0 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface-muted);overflow:hidden}
+.fatal-recovery-card summary{padding:10px 12px;cursor:pointer;color:var(--text-soft);font-size:10px;font-weight:800}
+.fatal-recovery-card pre{margin:0;padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;border-top:1px solid var(--border);color:var(--bad);font-size:9px;line-height:1.5}

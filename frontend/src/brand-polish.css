@@ -1,0 +1,10 @@
+.brand-mark{background:transparent url('/nexus.svg') center/cover no-repeat!important;box-shadow:0 12px 28px color-mix(in srgb,var(--accent) 20%,transparent)!important;overflow:hidden}
+.brand-mark>svg{display:none}
+
+@media print{
+  .theme-switcher,.connection-launcher,.free-source-launcher,.top-actions,.connector-strip,.sidebar{display:none!important}
+  .body-grid{display:block!important}
+  .content{max-width:none!important;padding:0!important}
+  .panel,.metric-card,.workspace-pulse{box-shadow:none!important;break-inside:avoid}
+  body{background:#fff!important;color:#111!important}
+}

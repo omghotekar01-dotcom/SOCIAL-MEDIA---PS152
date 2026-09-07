@@ -1,0 +1,50 @@
+/* Final responsive guardrail layer. Keep desktop chrome single-row so sticky offsets remain deterministic. */
+@media (min-width:901px){
+  .topbar{align-items:center!important;flex-wrap:nowrap!important}
+  .top-actions{flex-wrap:nowrap!important;min-width:0;overflow:visible}
+  .query-box{min-width:190px;flex:1 1 320px!important}
+  .top-actions>.btn{flex:none}
+}
+
+/* Secondary enrichment shortcuts move into the source drawer before they can collide. */
+@media (min-width:901px) and (max-width:1220px){
+  .top-actions>.btn:nth-of-type(2),
+  .top-actions>.btn:nth-of-type(3){display:none!important}
+  .topbar{padding-left:16px!important;padding-right:94px!important;gap:12px!important}
+  .brand{min-width:170px!important}
+  .query-box{min-width:220px!important}
+}
+
+@media (min-width:901px) and (max-width:1030px){
+  .top-actions>.btn:nth-of-type(4){display:none!important}
+  .brand strong{font-size:15px!important}
+  .query-box{min-width:180px!important}
+}
+
+/* The mobile layout is intentionally two-stage: brand first, then actions. */
+@media (max-width:900px){
+  .top-actions{display:grid!important;grid-template-columns:minmax(0,1fr) auto auto;align-items:center!important;width:100%}
+  .query-box{grid-column:1/-1!important}
+  .top-actions>.btn{min-width:0!important}
+  .top-actions>.btn:nth-of-type(2),.top-actions>.btn:nth-of-type(3){display:none!important}
+  .top-actions>.btn:nth-of-type(1),.top-actions>.btn:nth-of-type(4){width:auto!important}
+}
+
+@media (max-width:560px){
+  .top-actions{grid-template-columns:1fr 1fr!important}
+  .query-box{grid-column:1/-1!important}
+  .top-actions>.btn:nth-of-type(1),.top-actions>.btn:nth-of-type(4){width:100%!important}
+  .connector-strip{scroll-snap-type:x proximity}
+  .connector-item{scroll-snap-align:start}
+}
+
+/* Long titles, source names and badges must never create horizontal page scroll. */
+.brand,.brand>div:last-child,.page-head>div,.connection-card,.post-result-copy,.post-author-copy,.post-fact,.fact-row{min-width:0}
+.brand strong,.brand span,.page-head h1,.page-head p,.connection-card p,.connection-facts b,.connection-facts code{overflow-wrap:anywhere}
+
+/* Drawers stay usable on short laptop screens. */
+@media (max-height:720px){
+  .connection-drawer{top:8px!important;bottom:8px!important;padding-top:14px!important}
+  .free-source-drawer{max-height:calc(100vh - 16px)!important;bottom:8px!important}
+  .utility-drawer-head{margin-bottom:10px!important}
+}

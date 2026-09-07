@@ -3,10 +3,16 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  CheckCircle2,
+  Clock3,
+  Command,
   Database,
   Download,
   ExternalLink,
   GitBranch,
+  Globe2,
+  Layers3,
+  ListVideo,
   Network,
   Play,
   Radio,
@@ -18,6 +24,7 @@ import {
   Upload,
   Users,
   Waypoints,
+  Zap,
 } from 'lucide-react';
 import {
   Area,
@@ -44,11 +51,13 @@ import {
   SocialEvent,
   TimelinePoint,
 } from './api';
+import PostExplorer from './PostExplorer';
 
-type Tab = 'overview' | 'timeline' | 'trends' | 'narrative' | 'network' | 'demographics' | 'alerts' | 'evidence';
+type Tab = 'overview' | 'posts' | 'timeline' | 'trends' | 'narrative' | 'network' | 'demographics' | 'alerts' | 'evidence';
 
 const tabs: Array<{ id: Tab; label: string; icon: typeof Activity }> = [
   { id: 'overview', label: 'Overview', icon: Activity },
+  { id: 'posts', label: 'Posts / Explorer', icon: ListVideo },
   { id: 'timeline', label: 'Timeline', icon: Waypoints },
   { id: 'trends', label: 'Trends', icon: BarChart3 },
   { id: 'narrative', label: 'Narrative', icon: GitBranch },
@@ -90,6 +99,15 @@ function Metric({ label, value, helper, icon: Icon }: { label: string; value: st
         <div className="metric-label">{label}</div>
         {helper && <div className="metric-helper">{helper}</div>}
       </div>
+    </div>
+  );
+}
+
+function PulseCard({ icon: Icon, label, value, note, tone = 'neutral' }: { icon: typeof Activity; label: string; value: string | number; note: string; tone?: 'neutral' | 'good' | 'warn' }) {
+  return (
+    <div className={`pulse-card pulse-${tone}`}>
+      <div className="pulse-icon"><Icon size={17} /></div>
+      <div className="pulse-copy"><span>{label}</span><strong>{value}</strong><small>{note}</small></div>
     </div>
   );
 }
@@ -157,10 +175,10 @@ function TimelineView({ points }: { points: TimelinePoint[] }) {
             <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
             <XAxis dataKey="time" tick={{ fontSize: 12 }} />
             <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-            <Tooltip contentStyle={{ background: '#11182a', border: '1px solid #2a3550', borderRadius: 12 }} />
-            <Area type="monotone" dataKey="count" stroke="#77a7ff" fill="#77a7ff" fillOpacity={0.12} strokeWidth={3} />
-            <Line type="monotone" dataKey="negative" stroke="#ff7c88" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="positive" stroke="#54d8a7" strokeWidth={2} dot={false} />
+            <Tooltip contentStyle={{ background: 'var(--surface-elevated)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: 'var(--shadow-md)' }} />
+            <Area type="monotone" dataKey="count" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.12} strokeWidth={3} />
+            <Line type="monotone" dataKey="negative" stroke="var(--bad)" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="positive" stroke="var(--good)" strokeWidth={2} dot={false} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -244,7 +262,7 @@ function DemographicSliceCard({ title, slice }: { title: string; slice: Demograp
   );
 }
 
-function NarrativeView({ detail }: { detail: NarrativeDetail | null }) {
+function NarrativeView({ detail, onOpenEvent }: { detail: NarrativeDetail | null; onOpenEvent: (id: string) => void }) {
   if (!detail) return <div className="empty">Select a narrative from Trends to inspect its evidence-backed lineage.</div>;
   return (
     <div className="narrative-layout">
@@ -270,7 +288,10 @@ function NarrativeView({ detail }: { detail: NarrativeDetail | null }) {
                 </div>
                 <strong>{item.author || item.author_pseudo_id || 'Unknown author'}</strong>
                 <p>{item.text}</p>
-                <div className="chip-row"><span className="chip">sentiment: {item.sentiment || 'unknown'}</span><span className="chip">stance: {item.stance || 'unknown'}</span></div>
+                <div className="row-between">
+                  <div className="chip-row"><span className="chip">sentiment: {item.sentiment || 'unknown'}</span><span className="chip">stance: {item.stance || 'unknown'}</span></div>
+                  <button className="text-btn" onClick={() => onOpenEvent(item.event_id)}>Inspect post →</button>
+                </div>
                 {item.source_url && item.source_url.startsWith('http') && !item.source_url.includes('example.invalid') && (
                   <a href={item.source_url} target="_blank" rel="noreferrer">Open source <ExternalLink size={13} /></a>
                 )}
@@ -302,11 +323,13 @@ function NarrativeView({ detail }: { detail: NarrativeDetail | null }) {
 function App() {
   const [tab, setTab] = useState<Tab>('overview');
   const [query, setQuery] = useState('#RiverLinkUpdate');
+  const [activeQuery, setActiveQuery] = useState<string>('#RiverLinkUpdate · demo');
   const [overview, setOverview] = useState<Overview | null>(null);
   const [connectors, setConnectors] = useState<ConnectorStatus[]>([]);
   const [timelinePoints, setTimelinePoints] = useState<TimelinePoint[]>([]);
   const [narratives, setNarratives] = useState<NarrativeSummary[]>([]);
   const [selectedNarrativeId, setSelectedNarrativeId] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [narrativeDetail, setNarrativeDetail] = useState<NarrativeDetail | null>(null);
   const [network, setNetwork] = useState<NetworkResponse | null>(null);
   const [demographics, setDemographics] = useState<DemographicsResponse | null>(null);
@@ -317,6 +340,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const queryRef = useRef<HTMLInputElement>(null);
 
   const loadAll = useCallback(async () => {
     try {
@@ -333,17 +357,37 @@ function App() {
       setAlerts(alertData.alerts);
       setEvents(eventData.events);
       setCollector(collectorData);
+      setSelectedEventId((current) => eventData.events.some((event) => event.id === current) ? current : eventData.events[0]?.id || null);
+      const inferredQuery = String(eventData.events[0]?.public_profile?.search_query || '').trim();
+      if (inferredQuery) setActiveQuery(inferredQuery);
       const preferred = selectedNarrativeId || narrativeData.narratives[0]?.id || null;
       if (preferred) {
         setSelectedNarrativeId(preferred);
         try { setNarrativeDetail(await api.narrative(preferred)); } catch { setNarrativeDetail(null); }
+      } else {
+        setNarrativeDetail(null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to reach NEXUS backend.');
     }
   }, [selectedNarrativeId]);
 
-  useEffect(() => { void loadAll(); }, []); // intentionally initial load only
+  useEffect(() => { void loadAll(); }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
+      if (((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') || (event.key === '/' && !typing)) {
+        event.preventDefault();
+        queryRef.current?.focus();
+        queryRef.current?.select();
+      }
+      if (event.key === 'Escape' && document.activeElement === queryRef.current) queryRef.current?.blur();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useEffect(() => {
     if (!collector?.running) return;
@@ -364,6 +408,27 @@ function App() {
     }
   };
 
+  const runFreshSearch = async () => {
+    const clean = query.trim();
+    if (!clean) return;
+    setLoading(true); setError(null); setNotice(null);
+    try {
+      const result = await api.searchWorkspace(clean, { reset: true, limitPerSource: 15 });
+      const okSources = Object.entries(result.sources).filter(([, status]) => status.state === 'OK').map(([name]) => name);
+      const failedSources = Object.entries(result.sources).filter(([, status]) => status.state !== 'OK').map(([name]) => name);
+      setActiveQuery(clean);
+      setSelectedNarrativeId(null);
+      setSelectedEventId(null);
+      setNotice(`Fresh search: ${result.inserted} post(s) · live sources ${okSources.join(', ') || 'none'}${failedSources.length ? ` · unavailable ${failedSources.join(', ')}` : ''}`);
+      await loadAll();
+      setTab('posts');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Fresh search failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const openNarrative = async (id: string) => {
     setSelectedNarrativeId(id);
     setLoading(true);
@@ -376,6 +441,11 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const openPostById = (id: string) => {
+    setSelectedEventId(id);
+    setTab('posts');
   };
 
   const importJson = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -401,6 +471,13 @@ function App() {
     () => Object.entries(overview?.platform_mix || {}).sort((a, b) => b[1] - a[1]),
     [overview],
   );
+  const liveEventCount = useMemo(() => events.filter((event) => event.source_mode === 'LIVE').length, [events]);
+  const readyConnectorCount = useMemo(() => connectors.filter((item) => item.state === 'READY' || item.state === 'LIVE').length, [connectors]);
+  const latestEventAt = useMemo(() => events.reduce<string | null>((latest, event) => {
+    if (!latest) return event.created_at;
+    return new Date(event.created_at).getTime() > new Date(latest).getTime() ? event.created_at : latest;
+  }, null), [events]);
+  const coverageLimited = events.length > 0 && platformEntries.length < 2;
 
   return (
     <div className="app-shell">
@@ -410,11 +487,11 @@ function App() {
           <div><strong>NEXUS</strong><span>Narrative & Influence Intelligence · SIH26152</span></div>
         </div>
         <div className="top-actions">
-          <div className="query-box"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Monitor a topic or phrase" /></div>
-          <button className="btn btn-secondary" disabled={loading} onClick={() => action('Telegram live poll complete', api.pollTelegram)}><Radio size={16} /> Telegram</button>
-          <button className="btn btn-secondary" disabled={loading || !query.trim()} onClick={() => action('X live search complete', () => api.searchX(query.trim()))}>X Live</button>
-          <button className="btn btn-secondary" disabled={loading || !query.trim()} onClick={() => action('YouTube live search complete', () => api.searchYouTube(query.trim()))}>YouTube</button>
-          <button className="btn btn-primary" disabled={loading} onClick={() => action('Demo narrative seeded', api.seedDemo)}><Play size={16} /> Seed Demo</button>
+          <div className="query-box"><Search size={17} /><input ref={queryRef} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void runFreshSearch(); }} placeholder="New topic, phrase or #hashtag" aria-label="Search a new social-media topic" /><kbd><Command size={11} />K</kbd></div>
+          <button className="btn btn-primary" disabled={loading || !query.trim()} onClick={() => void runFreshSearch()}><Search size={15} /> Fresh Search</button>
+          <button className="btn btn-secondary" disabled={loading || !query.trim()} title="Append official X evidence to the current workspace" onClick={() => action('X evidence added to current workspace', () => api.searchX(query.trim()))}>+ X</button>
+          <button className="btn btn-secondary" disabled={loading || !query.trim()} title="Append official YouTube evidence to the current workspace" onClick={() => action('YouTube evidence added to current workspace', () => api.searchYouTube(query.trim()))}>+ YouTube</button>
+          <button className="btn btn-secondary" disabled={loading} onClick={() => action('Demo workspace loaded', api.seedDemo)}><Play size={15} /> Demo</button>
         </div>
       </header>
 
@@ -433,7 +510,7 @@ function App() {
           ))}
           <div className="sidebar-foot">
             <ShieldCheck size={17} />
-            <div><strong>Evidence mode</strong><span>LIVE / REPLAY / IMPORT always disclosed.</span></div>
+            <div><strong>Active workspace</strong><span>{activeQuery} · LIVE / REPLAY / IMPORT disclosed.</span></div>
           </div>
         </aside>
 
@@ -443,12 +520,26 @@ function App() {
           {tab === 'overview' && (
             <>
               <div className="page-head">
-                <div><div className="eyebrow">Cross-platform intelligence</div><h1>What is moving — and why?</h1><p>Track narrative emergence, mutation, sentiment and influence with source-level evidence.</p></div>
-                <button className="icon-btn" onClick={() => void loadAll()} title="Refresh"><RefreshCw size={18} /></button>
+                <div><div className="eyebrow">Workspace · {activeQuery}</div><h1>What is moving — and why?</h1><p>Each Fresh Search replaces the previous topic. Source buttons only enrich the current workspace.</p></div>
+                <button className="icon-btn" onClick={() => void loadAll()} title="Refresh current workspace"><RefreshCw size={18} /></button>
               </div>
 
+              <section className="workspace-pulse" aria-label="Workspace source health">
+                <div className="workspace-pulse-head">
+                  <div><span className="eyebrow">Live intelligence pulse</span><h2>Workspace readiness</h2></div>
+                  <div className="pulse-status"><span className={collector?.running ? 'pulse-live-dot' : 'pulse-ready-dot'} />{collector?.running ? 'Continuous collection active' : 'Ready for analyst search'}</div>
+                </div>
+                <div className="pulse-grid">
+                  <PulseCard icon={Zap} label="Live evidence" value={`${liveEventCount}/${events.length}`} note="events sourced as LIVE" tone={liveEventCount > 0 ? 'good' : 'neutral'} />
+                  <PulseCard icon={Globe2} label="Platform coverage" value={platformEntries.length} note={platformEntries.length === 1 ? 'single-source coverage' : 'distinct platforms observed'} tone={coverageLimited ? 'warn' : platformEntries.length > 1 ? 'good' : 'neutral'} />
+                  <PulseCard icon={CheckCircle2} label="Connectors ready" value={`${readyConnectorCount}/${connectors.length || 0}`} note="official/live states currently ready" tone={readyConnectorCount > 1 ? 'good' : 'neutral'} />
+                  <PulseCard icon={Clock3} label="Latest evidence" value={latestEventAt ? new Date(latestEventAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'} note={latestEventAt ? fmt(latestEventAt) : 'no events collected yet'} />
+                </div>
+                {coverageLimited && <div className="coverage-warning"><AlertTriangle size={17} /><div><strong>Coverage limited to one platform.</strong><span>Add Telegram/X/Bluesky/other evidence before presenting cross-platform conclusions.</span></div><button className="text-btn" onClick={() => setTab('posts')}>Inspect source →</button></div>}
+              </section>
+
               <div className="metric-grid">
-                <Metric icon={Database} label="Observed events" value={overview?.total_events || 0} helper="one normalized chronology" />
+                <Metric icon={Database} label="Observed events" value={overview?.total_events || 0} helper="current search workspace only" />
                 <Metric icon={GitBranch} label="Narratives" value={overview?.active_narratives || 0} helper="semantic + temporal clusters" />
                 <Metric icon={Activity} label="Rising" value={overview?.rising_narratives || 0} helper="burst & acceleration detected" />
                 <Metric icon={AlertTriangle} label="Evidence alerts" value={overview?.alerts || 0} helper="each alert links to evidence" />
@@ -456,21 +547,22 @@ function App() {
 
               <section className="panel" style={{ marginBottom: 14 }}>
                 <div className="section-head compact">
-                  <div><div className="eyebrow">Collection control</div><h3>Live connectors & continuous monitoring</h3></div>
+                  <div><div className="eyebrow">Collection control</div><h3>Enrich this workspace</h3></div>
                   <Badge tone={collector?.running ? 'live' : 'neutral'}>{collector?.running ? `RUNNING · ${collector.cycles} cycles` : 'STOPPED'}</Badge>
                 </div>
                 <div className="chip-row" style={{ gap: 8 }}>
+                  <button className="btn btn-secondary" disabled={loading} onClick={() => action('Telegram bot evidence added', api.pollTelegram)}><Radio size={15} /> Telegram Bot</button>
                   <button className="btn btn-secondary" disabled={loading} onClick={() => action('Instagram sync complete', () => api.syncMeta('instagram'))}>Instagram</button>
                   <button className="btn btn-secondary" disabled={loading} onClick={() => action('Facebook Page sync complete', () => api.syncMeta('facebook'))}>Facebook</button>
                   <button className="btn btn-secondary" disabled={loading} onClick={() => importRef.current?.click()}><Upload size={15} /> Import JSON</button>
                   <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={(e) => void importJson(e)} />
                   {!collector?.running ? (
-                    <button className="btn btn-primary" disabled={loading} onClick={() => action('Continuous Telegram collection started', () => api.startCollector(query.trim() || '#RiverLinkUpdate', { telegram: true, x: false, youtube: false, interval: 60 }))}><Radio size={15} /> Start continuous</button>
+                    <button className="btn btn-primary" disabled={loading} onClick={() => action('Continuous Telegram collection started', () => api.startCollector(query.trim() || activeQuery, { telegram: true, x: false, youtube: false, interval: 60 }))}><Radio size={15} /> Start continuous</button>
                   ) : (
                     <button className="btn btn-secondary" disabled={loading} onClick={() => action('Continuous collection stopped', api.stopCollector)}><Square size={14} /> Stop collection</button>
                   )}
                 </div>
-                <div className="coverage-callout"><ShieldCheck size={17} /><span>Continuous mode defaults to free Telegram only. X and YouTube polling stay opt-in to protect credits/quota. Meta buttons require authorized app/account permissions.</span></div>
+                <div className="coverage-callout"><ShieldCheck size={17} /><span>Fresh Search clears previous results first. These controls append evidence to the active topic instead of creating a second mixed search.</span></div>
               </section>
 
               <div className="overview-grid">
@@ -478,7 +570,7 @@ function App() {
                   <div className="section-head"><div><div className="eyebrow">Priority narratives</div><h2>Ranked by explainable trend score</h2></div><button className="text-btn" onClick={() => setTab('trends')}>View all →</button></div>
                   <div className="trend-list">
                     {(overview?.top_narratives || []).slice(0, 4).map((n) => <TrendCard key={n.id} narrative={n} onOpen={() => void openNarrative(n.id)} />)}
-                    {!overview?.top_narratives?.length && <div className="empty"><Sparkles size={30} /><h3>No events yet</h3><p>Use Seed Demo for a deterministic jury flow, or connect a live source.</p></div>}
+                    {!overview?.top_narratives?.length && <div className="empty"><Sparkles size={30} /><h3>No events yet</h3><p>Run Fresh Search for live/public results or load Demo for the deterministic jury flow.</p></div>}
                   </div>
                 </section>
                 <aside className="panel">
@@ -495,11 +587,13 @@ function App() {
             </>
           )}
 
+          {tab === 'posts' && <><div className="page-head"><div><div className="eyebrow">Selected post intelligence · {activeQuery}</div><h1>Posts / Explorer</h1><p>Select any result to inspect its media, author, engagement, NLP analysis and complete evidence provenance.</p></div><Badge tone="good">{events.length} current results</Badge></div><PostExplorer events={events} selectedId={selectedEventId} onSelect={(event) => setSelectedEventId(event.id)} /></>}
+
           {tab === 'timeline' && <><div className="page-head"><div><div className="eyebrow">Exact chronology</div><h1>Timeline & sentiment movement</h1><p>See when volume changes and whether emotion shifts with it.</p></div></div><TimelineView points={timelinePoints} /></>}
 
           {tab === 'trends' && <><div className="page-head"><div><div className="eyebrow">Real-time trend engine</div><h1>Emerging narratives</h1><p>Ranked using growth, burst, diversity, cross-platform presence, engagement and recency.</p></div></div><div className="trend-list standalone">{narratives.map((n) => <TrendCard key={n.id} narrative={n} onOpen={() => void openNarrative(n.id)} />)}</div></>}
 
-          {tab === 'narrative' && <><div className="page-head"><div><div className="eyebrow">Evidence-backed story</div><h1>Narrative lineage</h1><p>Earliest observed evidence → variants → amplification → sentiment change.</p></div></div><NarrativeView detail={narrativeDetail} /></>}
+          {tab === 'narrative' && <><div className="page-head"><div><div className="eyebrow">Evidence-backed story</div><h1>Narrative lineage</h1><p>Earliest observed evidence → variants → amplification → sentiment change.</p></div></div><NarrativeView detail={narrativeDetail} onOpenEvent={openPostById} /></>}
 
           {tab === 'network' && <><div className="page-head"><div><div className="eyebrow">Link analysis</div><h1>How influence moved</h1><p>Centrality and bridge roles describe observed network position — never guilt or intent.</p></div><div className="chip-row"><span className="chip">nodes {network?.summary.nodes || 0}</span><span className="chip">edges {network?.summary.edges || 0}</span><span className="chip">communities {network?.summary.communities || 0}</span></div></div><section className="panel panel-large"><NetworkGraph network={network} /></section></>}
 
@@ -507,7 +601,7 @@ function App() {
 
           {tab === 'alerts' && <><div className="page-head"><div><div className="eyebrow">Explainable alerts</div><h1>Why the system raised attention</h1><p>No black-box alarm: each alert includes trigger components, coverage warning and evidence IDs.</p></div></div><div className="alert-list">{alerts.map((alert) => <div className="panel alert-card" key={alert.alert_id}><div className="section-head compact"><div><div className="eyebrow">{fmt(alert.triggered_at)} · confidence {pct(alert.confidence)}</div><h3>{alert.title}</h3></div><Badge tone={alert.severity === 'high' ? 'bad' : 'warn'}>{alert.severity}</Badge></div><ul>{alert.why_triggered.map((why) => <li key={why}>{why}</li>)}</ul><div className="callout"><ShieldCheck size={16} /><span>{alert.coverage_warning}</span></div><div className="row-between"><span className="muted">{alert.evidence_event_ids.length} evidence events · score {alert.trend_score.toFixed(2)}</span><button className="text-btn" onClick={() => void openNarrative(alert.narrative_id)}>Open evidence →</button></div></div>)}{!alerts.length && <div className="empty">No narrative currently crosses the alert threshold.</div>}</div></>}
 
-          {tab === 'evidence' && <><div className="page-head"><div><div className="eyebrow">Source traceability</div><h1>Evidence ledger</h1><p>Every event retains platform, original timestamp, source mode and source URL where available.</p></div></div><section className="panel table-panel"><div className="evidence-table"><div className="evidence-row evidence-head"><span>Source</span><span>Time</span><span>Author</span><span>Text</span><span>Inference</span></div>{events.slice(0, 200).map((event) => <div className="evidence-row" key={event.id}><span><PlatformBadge platform={event.platform} /> <SourceBadge mode={event.source_mode} /></span><span>{fmt(event.created_at)}</span><span>{event.author_display || event.author_pseudo_id || '—'}</span><span className="evidence-text">{event.text}</span><span><Badge>{event.sentiment_label || 'unknown'}</Badge> <Badge>{event.stance_label || 'unclear'}</Badge>{event.url && !event.url.includes('example.invalid') && <a className="source-link" href={event.url} target="_blank" rel="noreferrer"><ExternalLink size={13} /></a>}</span></div>)}</div></section></>}
+          {tab === 'evidence' && <><div className="page-head"><div><div className="eyebrow">Source traceability</div><h1>Evidence ledger</h1><p>Click any row to open the complete selected-post view. Every event retains platform, timestamp, source mode and provenance.</p></div></div><section className="panel table-panel"><div className="evidence-table"><div className="evidence-row evidence-head"><span>Source</span><span>Time</span><span>Author</span><span>Text</span><span>Inference</span></div>{events.slice(0, 200).map((event) => <div className="evidence-row evidence-row-clickable" role="button" tabIndex={0} onClick={() => openPostById(event.id)} onKeyDown={(e) => { if (e.key === 'Enter') openPostById(event.id); }} key={event.id}><span><PlatformBadge platform={event.platform} /> <SourceBadge mode={event.source_mode} /></span><span>{fmt(event.created_at)}</span><span>{event.author_display || event.author_pseudo_id || '—'}</span><span className="evidence-text">{event.text}</span><span><Badge>{event.sentiment_label || 'unknown'}</Badge> <Badge>{event.stance_label || 'unclear'}</Badge>{event.url && !event.url.includes('example.invalid') && <a className="source-link" href={event.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}><ExternalLink size={13} /></a>}</span></div>)}</div></section></>}
         </main>
       </div>
     </div>

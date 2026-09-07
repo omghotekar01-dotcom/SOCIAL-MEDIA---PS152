@@ -4,10 +4,22 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from .config import get_settings
 
 
-Platform = Literal["x", "telegram", "youtube", "instagram", "facebook", "reddit", "replay"]
+Platform = Literal[
+    "x",
+    "telegram",
+    "youtube",
+    "instagram",
+    "facebook",
+    "reddit",
+    "bluesky",
+    "mastodon",
+    "replay",
+]
 SourceMode = Literal["LIVE", "REPLAY", "IMPORT"]
 
 
@@ -77,8 +89,113 @@ class XSearchRequest(BaseModel):
     max_results: int = Field(default=20, ge=10, le=100)
 
 
+class XManualReply(BaseModel):
+    text: str = Field(min_length=1, max_length=5000)
+    author: str | None = Field(default=None, max_length=120)
+    created_at: datetime | None = None
+    likes: int = Field(default=0, ge=0)
+
+
+class XManualConversationRequest(BaseModel):
+    """Analyst-provided X evidence when API/oEmbed cannot expose a thread.
+
+    This path is deliberately IMPORT, never LIVE. The original URL is retained
+    so judges/analysts can distinguish provider-fetched evidence from manually
+    transcribed public evidence.
+    """
+
+    url: str = Field(min_length=1, max_length=4000)
+    post_text: str = Field(min_length=1, max_length=10000)
+    author: str | None = Field(default=None, max_length=120)
+    created_at: datetime | None = None
+    replies: list[XManualReply] = Field(default_factory=list, max_length=250)
+
+    @field_validator("url")
+    @classmethod
+    def validate_x_url(cls, value: str) -> str:
+        clean = value.strip()
+        import re
+        if not re.search(r"https?://(?:(?:www|mobile)\.)?(?:x\.com|twitter\.com)/[A-Za-z0-9_]+/status/\d+", clean, re.I):
+            raise ValueError("Enter a valid public X/Twitter /status/ URL")
+        return clean
+
+
 class TelegramPollRequest(BaseModel):
     max_updates: int = Field(default=50, ge=1, le=100)
+
+
+class TelegramPublicRequest(BaseModel):
+    channel: str = Field(min_length=4, max_length=1000)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
+class PublicSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=300)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
+class WorkspaceSearchRequest(BaseModel):
+    """A fresh analyst search workspace.
+
+    A normal search replaces the previous result pool before collecting the new
+    topic, which prevents unrelated searches from colliding in analytics.
+    Individual connector buttons can still append evidence afterwards.
+
+    TELEGRAM_PUBLIC_CHANNELS in `.env` is automatically used when the request
+    does not provide an explicit channel target. The active query is attached to
+    the internal channel specification so the monitored-channel connector can
+    filter public Telegram posts before ingestion. For the SIH demo, the final
+    safety fallback is the user's public `NexusSIHDemo` channel.
+    """
+
+    query: str = Field(min_length=1, max_length=300)
+    reset: bool = True
+    limit_per_source: int = Field(default=15, ge=1, le=40)
+    enable_youtube: bool = True
+    enable_bluesky: bool = True
+    enable_reddit: bool = True
+    enable_mastodon: bool = True
+    telegram_channel: str | None = Field(default=None, max_length=1000)
+    instagram_profile: str | None = Field(default=None, max_length=30)
+
+    @model_validator(mode="after")
+    def attach_monitored_telegram_query(self):
+        settings = get_settings()
+        raw = (self.telegram_channel or settings.telegram_public_channels or "NexusSIHDemo").strip()
+        raw = raw or "NexusSIHDemo"
+        raw = raw.split("||", 1)[0].strip()
+        self.telegram_channel = f"{raw}||{self.query}"
+        return self
+
+
+class PublicBridgeRequest(BaseModel):
+    query: str = Field(default="", max_length=2000)
+    target: str = Field(default="", max_length=4000)
+    limit: int = Field(default=25, ge=1, le=100)
+
+
+class InstagramPublicRequest(BaseModel):
+    profile: str = Field(min_length=1, max_length=30)
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class InstagramHashtagRequest(BaseModel):
+    hashtag: str = Field(min_length=1, max_length=100)
+    limit: int = Field(default=25, ge=1, le=50)
+
+    @field_validator("hashtag")
+    @classmethod
+    def normalize_hashtag(cls, value: str) -> str:
+        normalized = value.strip().lstrip("#").strip()
+        if not normalized or any(ch.isspace() for ch in normalized):
+            raise ValueError("Enter one Instagram hashtag without spaces")
+        return normalized
+
+
+class MastodonSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=300)
+    limit: int = Field(default=25, ge=1, le=40)
+    base_url: str | None = Field(default=None, max_length=300)
 
 
 class YouTubeSearchRequest(BaseModel):

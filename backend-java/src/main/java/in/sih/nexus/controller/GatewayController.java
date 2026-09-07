@@ -58,6 +58,7 @@ public class GatewayController {
 
     @GetMapping({
             "/api/connectors/status",
+            "/api/collector/status",
             "/api/overview",
             "/api/timeline",
             "/api/trends",
@@ -65,33 +66,64 @@ public class GatewayController {
             "/api/network",
             "/api/demographics",
             "/api/alerts",
-            "/api/events"
+            "/api/events",
+            "/api/certificates"
     })
     public ResponseEntity<String> proxyGet(
             jakarta.servlet.http.HttpServletRequest request,
             @RequestParam Map<String, String> query
     ) {
         String downstreamPath = request.getRequestURI().substring("/api/gateway".length());
-        return get(downstreamPath, query);
+        return get(downstreamPath, query, MediaType.APPLICATION_JSON);
     }
 
     @GetMapping("/api/narratives/{id}")
     public ResponseEntity<String> narrative(@PathVariable String id) {
-        return get("/api/narratives/" + id, Map.of());
+        return get("/api/narratives/" + id, Map.of(), MediaType.APPLICATION_JSON);
     }
 
     @GetMapping("/api/events/{id}")
     public ResponseEntity<String> event(@PathVariable String id) {
-        return get("/api/events/" + id, Map.of());
+        return get("/api/events/" + id, Map.of(), MediaType.APPLICATION_JSON);
+    }
+
+    @GetMapping("/api/certificates/narrative/{id}")
+    public ResponseEntity<String> narrativeCertificate(@PathVariable String id) {
+        return get("/api/certificates/narrative/" + id, Map.of(), MediaType.APPLICATION_JSON);
+    }
+
+    @GetMapping("/api/certificates/alert/{id}")
+    public ResponseEntity<String> alertCertificate(@PathVariable String id) {
+        return get("/api/certificates/alert/" + id, Map.of(), MediaType.APPLICATION_JSON);
+    }
+
+    @GetMapping(value = "/api/export/narrative/{id}.json", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> exportNarrativeJson(@PathVariable String id) {
+        return get("/api/export/narrative/" + id + ".json", Map.of(), MediaType.APPLICATION_JSON);
+    }
+
+    @GetMapping(value = "/api/export/narrative/{id}.csv", produces = "text/csv")
+    public ResponseEntity<String> exportNarrativeCsv(@PathVariable String id) {
+        return get("/api/export/narrative/" + id + ".csv", Map.of(), MediaType.parseMediaType("text/csv; charset=utf-8"));
     }
 
     @PostMapping({
             "/api/demo/seed",
             "/api/ingest/replay",
+            "/api/collector/start",
+            "/api/collector/stop",
             "/api/connectors/x/search",
+            "/api/connectors/x/public",
             "/api/connectors/telegram/poll",
+            "/api/connectors/telegram/public",
             "/api/connectors/youtube/search",
-            "/api/connectors/meta/sync"
+            "/api/connectors/youtube/free",
+            "/api/connectors/meta/sync",
+            "/api/connectors/instagram/hashtag",
+            "/api/connectors/instagram/public",
+            "/api/connectors/bluesky/search",
+            "/api/connectors/reddit/search",
+            "/api/connectors/mastodon/search"
     })
     public ResponseEntity<String> proxyPost(
             jakarta.servlet.http.HttpServletRequest request,
@@ -119,7 +151,7 @@ public class GatewayController {
         }
     }
 
-    private ResponseEntity<String> get(String path, Map<String, String> query) {
+    private ResponseEntity<String> get(String path, Map<String, String> query, MediaType mediaType) {
         try {
             String body = fastApi.get()
                     .uri(builder -> {
@@ -130,8 +162,8 @@ public class GatewayController {
                     .retrieve()
                     .body(String.class);
             return ResponseEntity.ok()
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(body == null ? "{}" : body);
+                    .contentType(mediaType)
+                    .body(body == null ? (MediaType.APPLICATION_JSON.includes(mediaType) ? "{}" : "") : body);
         } catch (RestClientResponseException ex) {
             return ResponseEntity.status(ex.getStatusCode())
                     .contentType(MediaType.APPLICATION_JSON)

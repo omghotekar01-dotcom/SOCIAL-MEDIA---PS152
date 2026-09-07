@@ -30,6 +30,10 @@ backend-java/target/
 data/imports/*
 !data/imports/.gitkeep
 
+# Generated submission packages
+NEXUS_SIH26152_SUBMISSION_*.zip
+NEXUS_SIH26152_FULL_PROJECT.zip
+
 # Logs
 *.log
 logs/

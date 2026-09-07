@@ -1,0 +1,6 @@
+tweet_id,screen_name,full_text,created_at,favorite_count,retweet_count,url,lang
+9001,civic_alpha,"Public #RiverLinkUpdate says maintenance begins at 22:00. https://example.org/notice",2026-09-06T12:00:00Z,4,1,https://example.org/x/9001,en
+9002,civic_beta,"Is #RiverLinkUpdate a full shutdown? @civic_alpha please verify before sharing.",2026-09-06T12:05:00Z,7,2,https://example.org/x/9002,en
+9003,civic_gamma,"Concern rising about #RiverLinkUpdate but no verified full-day closure source is attached.",2026-09-06T12:09:00Z,12,5,https://example.org/x/9003,en
+9004,civic_delta,"Correction: verified notice shows only a limited maintenance block. #RiverLinkUpdate",2026-09-06T12:16:00Z,28,11,https://example.org/x/9004,en
+9005,civic_epsilon,"Please share the verified schedule instead of the earlier unconfirmed claim. #RiverLinkUpdate",2026-09-06T12:18:00Z,19,8,https://example.org/x/9005,en
