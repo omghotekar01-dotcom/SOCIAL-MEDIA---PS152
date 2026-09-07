@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0.."
 
 echo ============================================================
@@ -22,8 +22,22 @@ if errorlevel 1 (
   exit /b 1
 )
 
+set "DIRTY="
+for /f "delims=" %%G in ('git status --porcelain --untracked-files=no') do set "DIRTY=1"
+if defined DIRTY (
+  echo [ERROR] Tracked project files contain uncommitted changes.
+  echo [INFO] Commit or discard those changes before exporting so the ZIP cannot be stale.
+  exit /b 1
+)
+
 for /f %%S in ('git rev-parse --short HEAD') do set "SHA=%%S"
 for /f %%B in ('git branch --show-current') do set "BRANCH=%%B"
+
+if /I not "%BRANCH%"=="build/ps152-complete" (
+  echo [WARN] Current branch is "%BRANCH%".
+  echo [WARN] The latest SIH build is maintained on build/ps152-complete unless intentionally changed.
+  echo.
+)
 
 set "OUT=NEXUS_SIH26152_SUBMISSION_%SHA%.zip"
 
@@ -47,6 +61,7 @@ if not exist "%OUT%" (
 
 echo [PASS] Clean project ZIP created successfully.
 echo [SAFE] .env and other untracked local secrets were not included.
+echo [TRACE] ZIP corresponds exactly to committed revision %SHA%.
 echo.
 echo File: %CD%\%OUT%
 endlocal
