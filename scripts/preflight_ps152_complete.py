@@ -11,6 +11,7 @@ sys.path.insert(0, str(BACKEND))
 REQUIRED_FILES = [
     "backend-ai/app/advanced_analytics.py",
     "backend-ai/app/reaction_engine.py",
+    "backend-ai/app/complete_alerts.py",
     "backend-ai/app/advanced_collector.py",
     "backend-ai/app/conversation_connectors.py",
     "backend-ai/app/x_embed_resilience.py",
@@ -20,6 +21,7 @@ REQUIRED_FILES = [
     "frontend/src/conversation-intelligence.css",
     "frontend/src/FreeConnectorPanel.tsx",
     "frontend/src/PostExplorer.tsx",
+    "docs/SIH26152_COMPLETE_REQUIREMENT_MAP.md",
 ]
 
 TEXT_CONTRACTS = {
@@ -41,6 +43,11 @@ TEXT_CONTRACTS = {
         "risk_score",
         "ESCALATING",
         "root-post sentiment",
+    ],
+    "backend-ai/app/complete_alerts.py": [
+        "complete_alerts",
+        "AUDIENCE REACTION",
+        "wrongdoing or intent",
     ],
     "backend-ai/app/advanced_collector.py": [
         "enable_telegram_public",
@@ -65,6 +72,13 @@ TEXT_CONTRACTS = {
         "ReactionIntelligence",
         "content_disclosure",
         "analyst_manual_x_import",
+    ],
+    "docs/SIH26152_COMPLETE_REQUIREMENT_MAP.md": [
+        "Continuous Data Collection",
+        "Multi-Dimensional Sentiment",
+        "Automated Demographic Profiling",
+        "Real-Time Trend",
+        "Link Analysis",
     ],
 }
 
@@ -103,6 +117,7 @@ def main() -> int:
     for rel in [
         "backend-ai/app/advanced_analytics.py",
         "backend-ai/app/reaction_engine.py",
+        "backend-ai/app/complete_alerts.py",
         "backend-ai/app/advanced_collector.py",
         "backend-ai/app/conversation_connectors.py",
         "backend-ai/app/x_embed_resilience.py",
@@ -144,7 +159,7 @@ def main() -> int:
     if failures:
         print(f"SIH26152 COMPLETENESS CHECK FAILED with {failures} issue(s).")
         return 1
-    print("SIH26152 COMPLETENESS CHECK PASSED: collection, sentiment/emotion, demographics, trends, reactions and link-analysis integration contracts are present.")
+    print("SIH26152 COMPLETENESS CHECK PASSED: collection, sentiment/emotion, demographics, trends, reactions, alerts and link-analysis integration contracts are present.")
     return 0
 
 
