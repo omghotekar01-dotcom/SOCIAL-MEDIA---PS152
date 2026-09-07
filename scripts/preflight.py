@@ -40,6 +40,7 @@ REQUIRED = [
     "frontend/src/post-explorer.css",
     "frontend/src/premium-ui.css",
     "frontend/src/post-toolbar.css",
+    "frontend/src/command-center.css",
     "frontend/src/api.ts",
     "frontend/src/main.tsx",
     "frontend/package.json",
