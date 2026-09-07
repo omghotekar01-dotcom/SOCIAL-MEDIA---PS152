@@ -7,9 +7,10 @@ older internal functions before FastAPI/collector modules import them.
 from . import analytics as analytics
 from . import connectors as connectors
 from . import free_connectors as free_connectors
+from .advanced_analytics import advanced_demographics, advanced_infer_text, advanced_overview, advanced_trend_metrics
+from .conversation_connectors import bluesky_search_with_replies, mastodon_search_with_replies, reddit_search_with_comments
 from .priority_free_connectors import telegram_monitored_search
 from .resilient_connectors import instagram_resilient_profile, mastodon_resilient_search, reddit_resilient_search
-from .conversation_connectors import bluesky_search_with_replies, mastodon_search_with_replies, reddit_search_with_comments
 from .stable_alerts import stable_alerts
 from .stable_views import stable_network, stable_timeline
 from .x_embed_resilience import x_resilient_oembed_or_bridge
@@ -18,6 +19,13 @@ from .youtube_official import youtube_official_search
 # Backward-compatible public name retained for older preflight/tests/imports while
 # the active implementation is the hardened multi-endpoint X oEmbed connector.
 x_oembed_or_bridge = x_resilient_oembed_or_bridge
+
+# SIH26152 analysis contract: eight emotion dimensions, explicit stance/sarcasm,
+# aggregate privacy-conscious demographics, and near-term trend momentum.
+analytics.infer_text = advanced_infer_text
+analytics.demographics = advanced_demographics
+analytics.trend_metrics = advanced_trend_metrics
+analytics.overview = advanced_overview
 
 # Replay-stable alert identifiers and chart/graph implementations that remain
 # useful even for tiny live workspaces.
@@ -28,7 +36,8 @@ analytics.build_network = stable_network
 # Video-first official YouTube implementation everywhere, including collector runs.
 connectors.youtube_search = youtube_official_search
 
-# Preserve route signatures while strengthening public/fallback behavior.
+# Preserve route signatures while strengthening public/fallback behavior and
+# collecting linked public replies/comments where the provider exposes them.
 free_connectors.telegram_public_channel = telegram_monitored_search
 free_connectors.x_public_bridge = x_resilient_oembed_or_bridge
 free_connectors.bluesky_search = bluesky_search_with_replies
