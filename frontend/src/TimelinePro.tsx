@@ -27,6 +27,28 @@ type RichTimelinePoint = TimelinePoint & {
   emotions?: Record<string, number>;
 };
 
+type TimelineRow = {
+  rawTime: string;
+  time: string;
+  count: number;
+  positive: number;
+  negative: number;
+  neutral: number;
+  reactions: number;
+  supportive: number;
+  against: number;
+  sarcasm: number;
+  anxiety: number;
+  anger: number;
+  excitement: number;
+  sadness: number;
+  joy: number;
+  disgust: number;
+  surprise: number;
+  trust: number;
+  platforms: Record<string, number>;
+};
+
 type ThemeColors = {
   volume: string;
   positive: string;
@@ -117,12 +139,11 @@ function bucketEvents(events: SocialEvent[], minutes = 15): RichTimelinePoint[] 
       const emotionTotals: Record<string, number> = Object.fromEntries(
         EMOTION_LINES.map(([label]) => [label, 0]),
       );
-
       let reactionCount = 0;
       let sarcasmTotal = 0;
 
       for (const event of group) {
-        const sentiment = event.sentiment_label || 'unknown';
+        const sentiment = event.sentiment_label || 'neutral';
         sentiments[sentiment] = (sentiments[sentiment] || 0) + 1;
         platforms[event.platform] = (platforms[event.platform] || 0) + 1;
 
@@ -173,50 +194,59 @@ function fullTime(value: string): string {
     : date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+function toRows(points: RichTimelinePoint[]): TimelineRow[] {
+  return points.map((point) => ({
+    rawTime: point.time,
+    time: compactTime(point.time),
+    count: Number(point.count || 0),
+    positive: Number(point.sentiments?.positive || 0),
+    negative: Number(point.sentiments?.negative || 0),
+    neutral: Number(point.sentiments?.neutral || 0),
+    reactions: Number(point.reaction_count || 0),
+    supportive: Math.round(Number(point.supportive_share || 0) * 100),
+    against: Math.round(Number(point.against_share || 0) * 100),
+    sarcasm: Math.round(Number(point.sarcasm_mean || 0) * 100),
+    anxiety: Math.round(Number(point.emotions?.anxiety || 0) * 100),
+    anger: Math.round(Number(point.emotions?.anger || 0) * 100),
+    excitement: Math.round(Number(point.emotions?.excitement || 0) * 100),
+    sadness: Math.round(Number(point.emotions?.sadness || 0) * 100),
+    joy: Math.round(Number(point.emotions?.joy || 0) * 100),
+    disgust: Math.round(Number(point.emotions?.disgust || 0) * 100),
+    surprise: Math.round(Number(point.emotions?.surprise || 0) * 100),
+    trust: Math.round(Number(point.emotions?.trust || 0) * 100),
+    platforms: point.platforms || {},
+  }));
+}
+
 export default function TimelinePro({ points, events }: Props) {
   const colors = useChartTheme();
   const fallback = useMemo(() => bucketEvents(events), [events]);
-  const effectivePoints = (points.length ? points : fallback) as RichTimelinePoint[];
-  const usedFallback = points.length === 0 && fallback.length > 0;
+  const backendHasObservedVolume = points.some((point) => Number(point.count || 0) > 0);
+  const effectivePoints = (backendHasObservedVolume ? points : fallback) as RichTimelinePoint[];
+  const usedFallback = !backendHasObservedVolume && fallback.length > 0;
+  const data = useMemo(() => toRows(effectivePoints), [effectivePoints]);
+  const sparse = data.length <= 4;
 
-  const data = useMemo(() => effectivePoints.map((point) => {
-    const row: Record<string, string | number | Record<string, number>> = {
-      rawTime: point.time,
-      time: compactTime(point.time),
-      count: Number(point.count || 0),
-      positive: Number(point.sentiments?.positive || 0),
-      negative: Number(point.sentiments?.negative || 0),
-      neutral: Number(point.sentiments?.neutral || 0),
-      reactions: Number(point.reaction_count || 0),
-      supportive: Math.round(Number(point.supportive_share || 0) * 100),
-      against: Math.round(Number(point.against_share || 0) * 100),
-      sarcasm: Math.round(Number(point.sarcasm_mean || 0) * 100),
-      platforms: point.platforms || {},
-    };
-
-    for (const [label] of EMOTION_LINES) {
-      row[label] = Math.round(Number(point.emotions?.[label] || 0) * 100);
-    }
-    return row;
-  }), [effectivePoints]);
-
-  const total = data.reduce((sum, row) => sum + Number(row.count || 0), 0);
-  const totalReactions = data.reduce((sum, row) => sum + Number(row.reactions || 0), 0);
+  const total = data.reduce((sum, row) => sum + row.count, 0);
+  const totalReactions = data.reduce((sum, row) => sum + row.reactions, 0);
   const peak = data.reduce(
-    (best, row) => Number(row.count || 0) > Number(best.count || 0) ? row : best,
-    data[0] || { count: 0, time: '—', rawTime: '' },
+    (best, row) => row.count > best.count ? row : best,
+    data[0] || {
+      rawTime: '', time: '—', count: 0, positive: 0, negative: 0, neutral: 0,
+      reactions: 0, supportive: 0, against: 0, sarcasm: 0, anxiety: 0, anger: 0,
+      excitement: 0, sadness: 0, joy: 0, disgust: 0, surprise: 0, trust: 0, platforms: {},
+    },
   );
   const platformSet = new Set(
     effectivePoints.flatMap((point) => Object.keys(point.platforms || {})),
   );
-  const sparse = data.length <= 4;
 
-  if (!data.length) {
+  if (!data.length || total <= 0) {
     return (
       <section className="analysis-empty panel panel-large">
         <div className="analysis-empty-icon"><Clock3 size={26} /></div>
         <h2>No timeline evidence yet</h2>
-        <p>Run Fresh Search, add a live source, or load the deterministic demo. The timeline appears when timestamped evidence is present.</p>
+        <p>Run Fresh Search, add a live source, or load Demo. NEXUS renders the timeline as soon as timestamped evidence exists.</p>
         <div className="analysis-empty-note"><ShieldCheck size={15} /> Timeline uses source timestamps, not browser arrival time.</div>
       </section>
     );
@@ -225,47 +255,17 @@ export default function TimelinePro({ points, events }: Props) {
   return (
     <div className="timeline-pro">
       <div className="analysis-summary-grid timeline-summary-grid">
-        <div className="analysis-summary-card">
-          <Database size={17} />
-          <span>Events in timeline</span>
-          <strong>{total}</strong>
-          <small>{usedFallback ? 'rebuilt locally from evidence events' : 'backend timeline buckets'}</small>
-        </div>
-        <div className="analysis-summary-card">
-          <MessageCircle size={17} />
-          <span>Audience reactions</span>
-          <strong>{totalReactions}</strong>
-          <small>comments / replies linked to chronology</small>
-        </div>
-        <div className="analysis-summary-card">
-          <Activity size={17} />
-          <span>Peak bucket</span>
-          <strong>{Number(peak.count || 0)}</strong>
-          <small>{String(peak.rawTime || '') ? fullTime(String(peak.rawTime)) : '—'}</small>
-        </div>
-        <div className="analysis-summary-card">
-          <Layers3 size={17} />
-          <span>Platforms</span>
-          <strong>{platformSet.size}</strong>
-          <small>{data.length} timestamped 15-minute windows</small>
-        </div>
+        <div className="analysis-summary-card"><Database size={17} /><span>Events in timeline</span><strong>{total}</strong><small>{usedFallback ? 'rebuilt directly from evidence events' : 'backend timeline buckets'}</small></div>
+        <div className="analysis-summary-card"><MessageCircle size={17} /><span>Audience reactions</span><strong>{totalReactions}</strong><small>comments / replies linked to chronology</small></div>
+        <div className="analysis-summary-card"><Activity size={17} /><span>Peak bucket</span><strong>{peak.count}</strong><small>{peak.rawTime ? fullTime(peak.rawTime) : '—'}</small></div>
+        <div className="analysis-summary-card"><Layers3 size={17} /><span>Platforms</span><strong>{platformSet.size}</strong><small>{data.length} timestamped 15-minute windows</small></div>
       </div>
 
       <section className="panel panel-large timeline-chart-card">
         <div className="analysis-section-head">
-          <div>
-            <span className="eyebrow">Exact chronology</span>
-            <h2>Conversation volume & sentiment movement</h2>
-            <p>Volume bars and polarity lines preserve the chronology of the collected dataset. Sparse searches show markers so one or two buckets remain visible.</p>
-          </div>
-          <div className="timeline-legend" aria-label="Timeline legend">
-            <span><i style={{ background: colors.volume }} />Volume</span>
-            <span><i style={{ background: colors.positive }} />Positive</span>
-            <span><i style={{ background: colors.negative }} />Negative</span>
-            <span><i style={{ background: colors.neutral }} />Neutral</span>
-          </div>
+          <div><span className="eyebrow">Exact chronology</span><h2>Conversation volume & sentiment movement</h2><p>Volume bars and polarity lines preserve the chronology of collected evidence. Sparse searches show visible point markers.</p></div>
+          <div className="timeline-legend" aria-label="Timeline legend"><span><i style={{ background: colors.volume }} />Volume</span><span><i style={{ background: colors.positive }} />Positive</span><span><i style={{ background: colors.negative }} />Negative</span><span><i style={{ background: colors.neutral }} />Neutral</span></div>
         </div>
-
         <div className="timeline-chart-shell">
           <ResponsiveContainer width="100%" height={390} minWidth={280}>
             <ComposedChart data={data} margin={{ top: 18, right: 18, bottom: 8, left: 0 }}>
@@ -283,14 +283,7 @@ export default function TimelinePro({ points, events }: Props) {
       </section>
 
       <section className="panel panel-large timeline-chart-card">
-        <div className="analysis-section-head">
-          <div>
-            <span className="eyebrow">SIH26152 · multi-dimensional sentiment</span>
-            <h2>Eight-emotion movement</h2>
-            <p>Anxiety, anger, excitement, sadness, joy, disgust, surprise and trust are mapped over the same source-timestamped chronology.</p>
-          </div>
-        </div>
-
+        <div className="analysis-section-head"><div><span className="eyebrow">SIH26152 · multi-dimensional sentiment</span><h2>Eight-emotion movement</h2><p>Anxiety, anger, excitement, sadness, joy, disgust, surprise and trust over the same source-timestamped chronology.</p></div></div>
         <div className="timeline-chart-shell">
           <ResponsiveContainer width="100%" height={370} minWidth={280}>
             <ComposedChart data={data} margin={{ top: 18, right: 18, bottom: 8, left: 0 }}>
@@ -299,17 +292,7 @@ export default function TimelinePro({ points, events }: Props) {
               <YAxis domain={[0, 100]} stroke={colors.text} tick={{ fill: colors.text, fontSize: 11 }} tickLine={false} axisLine={false} width={38} />
               <Tooltip contentStyle={{ background: colors.tooltipBg, color: colors.text, border: `1px solid ${colors.tooltipBorder}`, borderRadius: 14 }} />
               {EMOTION_LINES.map(([label, stroke]) => (
-                <Line
-                  key={label}
-                  isAnimationActive={false}
-                  type="monotone"
-                  dataKey={label}
-                  name={label.charAt(0).toUpperCase() + label.slice(1)}
-                  stroke={stroke}
-                  strokeWidth={2}
-                  dot={sparse ? { r: 3.5, fill: stroke, strokeWidth: 0 } : false}
-                  activeDot={{ r: 5 }}
-                />
+                <Line key={label} isAnimationActive={false} type="monotone" dataKey={label} name={label.charAt(0).toUpperCase() + label.slice(1)} stroke={stroke} strokeWidth={2} dot={sparse ? { r: 3.5, fill: stroke, strokeWidth: 0 } : false} activeDot={{ r: 5 }} />
               ))}
             </ComposedChart>
           </ResponsiveContainer>
@@ -317,14 +300,7 @@ export default function TimelinePro({ points, events }: Props) {
       </section>
 
       <section className="panel panel-large timeline-chart-card">
-        <div className="analysis-section-head">
-          <div>
-            <span className="eyebrow">SIH26152 · audience direction</span>
-            <h2>Emotion, stance & sarcasm fluctuation</h2>
-            <p>Supportive/against stance and sarcasm remain separate from raw positive/negative polarity.</p>
-          </div>
-        </div>
-
+        <div className="analysis-section-head"><div><span className="eyebrow">SIH26152 · audience direction</span><h2>Emotion, stance & sarcasm fluctuation</h2><p>Supportive/against stance and sarcasm stay separate from raw positive/negative polarity.</p></div></div>
         <div className="timeline-chart-shell">
           <ResponsiveContainer width="100%" height={320} minWidth={280}>
             <ComposedChart data={data} margin={{ top: 18, right: 18, bottom: 8, left: 0 }}>
@@ -338,44 +314,22 @@ export default function TimelinePro({ points, events }: Props) {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-        <div className="analysis-trust-note">
-          <ShieldCheck size={16} />
-          <span>Emotion/stance lines are descriptive NLP signals within collected evidence. They are not clinical, identity, intent or wrongdoing classifications.</span>
-        </div>
+        <div className="analysis-trust-note"><ShieldCheck size={16} /><span>Emotion/stance lines are descriptive NLP signals within collected evidence. They are not clinical, identity, intent or wrongdoing classifications.</span></div>
       </section>
 
       <section className="panel timeline-bucket-card">
-        <div className="analysis-section-head compact">
-          <div><span className="eyebrow">Bucket detail</span><h3>Recent chronology</h3></div>
-          <span className="analysis-count-pill">{Math.min(12, data.length)} shown</span>
-        </div>
+        <div className="analysis-section-head compact"><div><span className="eyebrow">Bucket detail</span><h3>Recent chronology</h3></div><span className="analysis-count-pill">{Math.min(12, data.length)} shown</span></div>
         <div className="timeline-bucket-list">
-          {data.slice(-12).reverse().map((row) => {
-            const platforms = row.platforms as Record<string, number>;
-            return (
-              <div className="timeline-bucket-row" key={String(row.rawTime)}>
-                <time>{fullTime(String(row.rawTime))}</time>
-                <strong>{Number(row.count)} event{Number(row.count) === 1 ? '' : 's'} · {Number(row.reactions)} reactions</strong>
-                <div className="timeline-mini-sentiments">
-                  <span className="positive">+ {Number(row.positive)}</span>
-                  <span className="negative">− {Number(row.negative)}</span>
-                  <span className="neutral">• {Number(row.neutral)}</span>
-                </div>
-                <div className="timeline-platform-mini">
-                  {Object.entries(platforms || {}).map(([platform, count]) => (
-                    <span key={platform}>{platform} {count}</span>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+          {data.slice(-12).reverse().map((row) => (
+            <div className="timeline-bucket-row" key={row.rawTime}>
+              <time>{fullTime(row.rawTime)}</time>
+              <strong>{row.count} event{row.count === 1 ? '' : 's'} · {row.reactions} reactions</strong>
+              <div className="timeline-mini-sentiments"><span className="positive">+ {row.positive}</span><span className="negative">− {row.negative}</span><span className="neutral">• {row.neutral}</span></div>
+              <div className="timeline-platform-mini">{Object.entries(row.platforms).map(([platform, count]) => <span key={platform}>{platform} {count}</span>)}</div>
+            </div>
+          ))}
         </div>
-        <div className="analysis-trust-note">
-          <ShieldCheck size={16} />
-          <span>{usedFallback
-            ? 'Backend timeline returned no points, so NEXUS reconstructed chronology from collected evidence without inventing events.'
-            : 'Exact source timestamps are preserved separately from ingestion time. Sparse chart markers are visual only and never become synthetic evidence.'}</span>
-        </div>
+        <div className="analysis-trust-note"><ShieldCheck size={16} /><span>{usedFallback ? 'Backend timeline had no observed-volume buckets, so NEXUS rebuilt the chronology directly from collected evidence without inventing events.' : 'Exact source timestamps are preserved separately from ingestion time.'}</span></div>
       </section>
     </div>
   );
