@@ -64,8 +64,45 @@ REQUIRED = [
     "docs/PS26152_TRACEABILITY.md",
     "docs/WHAT_I_NEED_FROM_YOU.md",
     "docs/PRODUCTION_GAP_AUDIT.md",
+    "docs/UI_PRODUCT_GUIDE.md",
     "prompts/MASTER_SUPER_PROMPT.md",
 ]
+
+UI_CONTRACTS: dict[str, tuple[str, ...]] = {
+    "frontend/src/App.tsx": (
+        "workspace-pulse",
+        "coverageLimited",
+        "queryRef",
+        "Live intelligence pulse",
+    ),
+    "frontend/src/PostExplorer.tsx": (
+        "ModeFilter",
+        "post-local-search",
+        "official_x_oembed",
+        "Newest first",
+    ),
+    "frontend/src/ThemeController.tsx": (
+        "nexus-theme",
+        "dataset.theme",
+        "theme-color",
+    ),
+    "frontend/src/main.tsx": (
+        "AppErrorBoundary",
+        "nexus:workspace-updated",
+        "responsive-pro.css",
+        "resilience.css",
+    ),
+    "frontend/src/FreeConnectorPanel.tsx": (
+        "nexus:workspace-updated",
+        "LoaderCircle",
+        "aria-modal",
+    ),
+    "frontend/src/ConnectionCenter.tsx": (
+        "ConnectionFilter",
+        "High priority",
+        "aria-modal",
+    ),
+}
 
 
 def ok(message: str) -> None:
@@ -114,6 +151,18 @@ def main() -> int:
             fail(f"missing required file: {rel}")
             failures += 1
 
+    for rel, required_tokens in UI_CONTRACTS.items():
+        path = ROOT / rel
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        missing = [token for token in required_tokens if token not in text]
+        if missing:
+            fail(f"modern UI contract missing in {rel}: {', '.join(missing)}")
+            failures += 1
+        else:
+            ok(f"modern UI contract: {rel}")
+
     syntax_failures = 0
     for root_dir in (ROOT / "backend-ai", ROOT / "scripts"):
         for path in sorted(root_dir.rglob("*.py")):
@@ -131,11 +180,13 @@ def main() -> int:
     package_path = ROOT / "frontend" / "package.json"
     try:
         package = json.loads(package_path.read_text(encoding="utf-8"))
-        if "build" in package.get("scripts", {}):
-            ok("frontend package.json is valid and has build script")
-        else:
-            fail("frontend package.json has no build script")
+        scripts = package.get("scripts", {})
+        missing_scripts = sorted({"build", "typecheck"} - set(scripts))
+        if missing_scripts:
+            fail("frontend package.json missing scripts: " + ", ".join(missing_scripts))
             failures += 1
+        else:
+            ok("frontend package.json has build + typecheck scripts")
         if any(value == "latest" for section in ("dependencies", "devDependencies") for value in package.get(section, {}).values()):
             fail("frontend package.json still contains moving 'latest' dependencies")
             failures += 1
@@ -199,6 +250,13 @@ def main() -> int:
     if npm:
         ok(f"npm available: {npm}")
         if (ROOT / "frontend" / "node_modules").exists():
+            code, output = run([npm, "run", "typecheck"], ROOT / "frontend")
+            if code == 0:
+                ok("frontend TypeScript typecheck")
+            else:
+                fail("frontend TypeScript typecheck failed")
+                print(output[-4000:])
+                failures += 1
             code, output = run([npm, "run", "build"], ROOT / "frontend")
             if code == 0:
                 ok("frontend production build")
