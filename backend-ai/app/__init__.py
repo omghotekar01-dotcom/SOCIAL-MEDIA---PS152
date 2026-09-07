@@ -14,6 +14,10 @@ from .stable_views import stable_network, stable_timeline
 from .x_embed_resilience import x_resilient_oembed_or_bridge
 from .youtube_official import youtube_official_search
 
+# Backward-compatible public name retained for older preflight/tests/imports while
+# the active implementation is the hardened multi-endpoint X oEmbed connector.
+x_oembed_or_bridge = x_resilient_oembed_or_bridge
+
 # Replay-stable alert identifiers and chart/graph implementations that remain
 # useful even for tiny live workspaces.
 analytics.alerts = stable_alerts
