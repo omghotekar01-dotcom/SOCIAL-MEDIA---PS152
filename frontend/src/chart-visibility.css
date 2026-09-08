@@ -1,11 +1,163 @@
-/* Final chart visibility guardrails — loaded after the rest of the product CSS. */
+/* Final chart visibility + presentation layout guardrails.
+   Loaded after the rest of the product CSS so jury-facing analytics remain
+   large enough to read while fitting more intelligence in one viewport. */
 .timeline-pro,.narrative-layout,.narrative-graph-block{min-width:0}
 .timeline-chart-card,.narrative-layout>.panel,.narrative-graph-block{overflow:visible!important}
-.timeline-chart-shell,.narrative-graph-shell{position:relative!important;display:block!important;width:100%!important;min-width:280px!important;visibility:visible!important;opacity:1!important}
-.timeline-chart-shell{height:430px!important;min-height:360px!important}
-.narrative-graph-shell{height:390px!important;min-height:360px!important}
-.timeline-chart-shell>.recharts-responsive-container,.narrative-graph-shell>.recharts-responsive-container{display:block!important;width:100%!important;height:100%!important;min-width:280px!important;min-height:320px!important;visibility:visible!important;opacity:1!important}
-.timeline-chart-shell .recharts-wrapper,.narrative-graph-shell .recharts-wrapper{display:block!important;min-width:280px!important;visibility:visible!important;opacity:1!important}
-.timeline-chart-shell svg,.narrative-graph-shell svg{display:block!important;visibility:visible!important;opacity:1!important;overflow:visible!important}
-.timeline-chart-shell .recharts-cartesian-grid,.timeline-chart-shell .recharts-layer,.narrative-graph-shell .recharts-cartesian-grid,.narrative-graph-shell .recharts-layer{visibility:visible!important;opacity:1}
-@media(max-width:760px){.timeline-chart-shell,.narrative-graph-shell{min-width:0!important;height:350px!important;min-height:330px!important}.timeline-chart-shell>.recharts-responsive-container,.narrative-graph-shell>.recharts-responsive-container{min-width:0!important}}
+
+/* ---------- Timeline: compact analyst workbench ---------- */
+.timeline-pro{
+  display:grid!important;
+  grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr)!important;
+  gap:12px!important;
+  align-items:start;
+}
+.timeline-summary-grid{
+  grid-column:1/-1;
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:8px!important;
+  margin-bottom:0!important;
+}
+.timeline-summary-grid .analysis-summary-card{
+  min-height:78px!important;
+  padding:10px 12px!important;
+  column-gap:8px!important;
+}
+.timeline-summary-grid .analysis-summary-card>svg{
+  width:28px!important;
+  height:28px!important;
+  padding:6px!important;
+}
+.timeline-summary-grid .analysis-summary-card>strong{font-size:20px!important;margin-top:2px!important}
+.timeline-summary-grid .analysis-summary-card>span{font-size:8px!important}
+.timeline-summary-grid .analysis-summary-card>small{font-size:8px!important;margin-top:3px!important}
+
+.timeline-pro>.timeline-chart-card{
+  min-width:0;
+  padding:13px!important;
+  margin:0!important;
+}
+.timeline-pro>.timeline-chart-card:first-of-type{grid-column:1/-1}
+.timeline-pro>.timeline-chart-card:nth-of-type(2),
+.timeline-pro>.timeline-chart-card:nth-of-type(3){grid-column:auto}
+.timeline-pro>.timeline-bucket-card,
+.timeline-pro>.analysis-trust-note{grid-column:1/-1}
+
+.timeline-chart-card .analysis-section-head{margin-bottom:8px!important;gap:10px!important}
+.timeline-chart-card .analysis-section-head h2{font-size:15px!important;line-height:1.18!important}
+.timeline-chart-card .analysis-section-head p{font-size:9px!important;line-height:1.35!important;margin-top:4px!important;max-width:920px!important}
+.timeline-chart-card .eyebrow{font-size:8px!important}
+.timeline-legend{gap:8px!important}
+.timeline-legend span{font-size:8px!important}
+
+.timeline-chart-shell,.narrative-graph-shell{
+  position:relative!important;
+  display:block!important;
+  width:100%!important;
+  min-width:280px!important;
+  visibility:visible!important;
+  opacity:1!important;
+}
+.timeline-chart-shell{
+  height:360px!important;
+  min-height:340px!important;
+  padding:2px 4px 0!important;
+  border-radius:12px!important;
+}
+.timeline-pro>.timeline-chart-card:nth-of-type(2) .timeline-chart-shell,
+.timeline-pro>.timeline-chart-card:nth-of-type(3) .timeline-chart-shell{
+  height:350px!important;
+  min-height:330px!important;
+}
+
+/* Give the plot itself the space instead of leaving unused shell padding. */
+.timeline-chart-shell>.recharts-responsive-container,
+.narrative-graph-shell>.recharts-responsive-container{
+  display:block!important;
+  width:100%!important;
+  height:100%!important;
+  min-width:280px!important;
+  min-height:320px!important;
+  visibility:visible!important;
+  opacity:1!important;
+}
+.timeline-chart-shell .recharts-wrapper,
+.narrative-graph-shell .recharts-wrapper{
+  display:block!important;
+  width:100%!important;
+  min-width:280px!important;
+  visibility:visible!important;
+  opacity:1!important;
+}
+.timeline-chart-shell svg,.narrative-graph-shell svg{
+  display:block!important;
+  visibility:visible!important;
+  opacity:1!important;
+  overflow:visible!important;
+}
+.timeline-chart-shell .recharts-cartesian-grid,
+.timeline-chart-shell .recharts-layer,
+.narrative-graph-shell .recharts-cartesian-grid,
+.narrative-graph-shell .recharts-layer{visibility:visible!important;opacity:1}
+
+/* Make graph labels readable on a projector/laptop without making cards bulky. */
+.timeline-chart-shell .recharts-cartesian-axis-tick-value,
+.narrative-graph-shell .recharts-cartesian-axis-tick-value{
+  font-size:11px!important;
+  font-weight:650!important;
+}
+.timeline-chart-shell .recharts-tooltip-wrapper,
+.narrative-graph-shell .recharts-tooltip-wrapper{font-size:10px!important;z-index:20!important}
+
+/* ---------- Narrative: wider graph, smaller chrome ---------- */
+.narrative-layout{
+  grid-template-columns:minmax(0,1fr) 250px!important;
+  gap:10px!important;
+}
+.narrative-graph-block{
+  gap:8px!important;
+  margin:10px 0 14px!important;
+  padding:11px!important;
+  border-radius:14px!important;
+}
+.narrative-graph-head{gap:10px!important}
+.narrative-graph-head h3{font-size:15px!important;line-height:1.2!important}
+.narrative-graph-head p{font-size:9px!important;line-height:1.35!important;margin-top:4px!important}
+.narrative-graph-kpis{gap:5px!important}
+.narrative-graph-kpis span{padding:5px 7px!important;font-size:8px!important}
+.narrative-graph-shell{
+  height:400px!important;
+  min-height:380px!important;
+  padding:2px 4px 0!important;
+  border-radius:12px!important;
+}
+.narrative-graph-foot{font-size:8px!important;line-height:1.35!important}
+
+/* Desktop/laptop balance: keep charts readable rather than squeezing two tiny plots. */
+@media(max-width:1180px){
+  .timeline-pro{grid-template-columns:1fr!important}
+  .timeline-pro>.timeline-chart-card{grid-column:1/-1!important}
+  .timeline-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .narrative-layout{grid-template-columns:1fr!important}
+  .narrative-side{position:static!important}
+}
+
+@media(max-width:760px){
+  .timeline-summary-grid{grid-template-columns:1fr 1fr!important;gap:7px!important}
+  .timeline-summary-grid .analysis-summary-card{min-height:72px!important;padding:9px!important}
+  .timeline-chart-card{padding:10px!important}
+  .timeline-chart-shell,.narrative-graph-shell{min-width:0!important;height:335px!important;min-height:320px!important}
+  .timeline-pro>.timeline-chart-card:nth-of-type(2) .timeline-chart-shell,
+  .timeline-pro>.timeline-chart-card:nth-of-type(3) .timeline-chart-shell{height:335px!important;min-height:320px!important}
+  .timeline-chart-shell>.recharts-responsive-container,
+  .narrative-graph-shell>.recharts-responsive-container{min-width:0!important;min-height:300px!important}
+  .timeline-chart-shell .recharts-wrapper,
+  .narrative-graph-shell .recharts-wrapper{min-width:0!important}
+  .narrative-graph-head{display:grid!important}
+  .narrative-graph-kpis{justify-content:flex-start!important}
+}
+
+@media(max-width:480px){
+  .timeline-summary-grid{grid-template-columns:1fr!important}
+  .timeline-chart-card .analysis-section-head p{display:none}
+  .timeline-chart-shell,.narrative-graph-shell{height:320px!important;min-height:305px!important}
+}
